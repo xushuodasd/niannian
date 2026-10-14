@@ -31,7 +31,7 @@ MIND_TICK_SECONDS = 120.0
 EDITABLE_LIFE_FIELDS = {
     "name", "avatar", "gender", "backstory", "awareness",
     "temperament", "big_five", "attachment",
-    "needs_fears", "quirks", "beliefs", "style", "canon",
+    "needs_fears", "quirks", "beliefs", "style", "canon", "schedule",
 }
 
 
@@ -92,6 +92,18 @@ class LifeRegistry:
                 self._store.save(life)
                 logger.info(f"生命体「{life.name}」补齐说话习惯：{life.style.bubble_habit}")
 
+        if not life.schedule:
+            # 老存档/默认体迁移：按人设派生个人作息（一次迁移，落盘固化）。
+            # 此前所有生命体共用全局 config 一张作息表——"白天都忙碌、晚上都犯困"。
+            from ..mind.genesis import derive_schedule
+
+            life.schedule = derive_schedule(life)
+            self._store.save(life)
+            logger.info(
+                f"生命体「{life.name}」生成个人作息：{life.schedule['wake_at']} 起 / "
+                f"{life.schedule['sleep_at']} 睡（抖动 ±{life.schedule['jitter_minutes']} 分钟）"
+            )
+
         psyche = await self._repo.load_psyche(life, self._clock.now())
         snapshot = await self._repo.load_life_state(life_id)
         initial = PresenceState.ACTIVE
@@ -115,6 +127,7 @@ class LifeRegistry:
             on_change=self._on_presence_change,
             initial=initial,
             state_since=state_since,
+            schedule_override=life.schedule or None,
         )
         rt = LifeRuntime(life=life, psyche=psyche, controller=controller)
         self._runtimes[life_id] = rt

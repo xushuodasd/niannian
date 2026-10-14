@@ -43,20 +43,27 @@ def _in_period(minute: int, start: int, end: int) -> bool:
 
 
 class Schedule:
-    """作息表：给定时刻 → 预期生命状态。带每日随机抖动，避免机械感。"""
+    """作息表：给定时刻 → 预期生命状态。带每日随机抖动，避免机械感。
 
-    def __init__(self, cfg: PresenceConfig) -> None:
+    ``override`` 是**个人作息**（来自生命体存档 ``schedule`` 字段，由创世按人设派生、
+    可在控制台编辑）：逐项覆盖全局 ``config.toml [presence]``，缺省项回落全局——
+    保证"人人作息不同"，而不是所有生命体共用一张表。
+    """
+
+    def __init__(self, cfg: PresenceConfig, override: dict | None = None) -> None:
+        ov = override or {}
         self._cfg = cfg
-        self._wake = _parse_hhmm(cfg.wake_at)
-        self._sleep = _parse_hhmm(cfg.sleep_at)
-        self._busy = [_parse_period(p) for p in cfg.busy_periods]
-        self._rest = [_parse_period(p) for p in cfg.rest_periods]
+        self._wake = _parse_hhmm(str(ov.get("wake_at", cfg.wake_at)))
+        self._sleep = _parse_hhmm(str(ov.get("sleep_at", cfg.sleep_at)))
+        self._busy = [_parse_period(str(p)) for p in ov.get("busy_periods", cfg.busy_periods)]
+        self._rest = [_parse_period(str(p)) for p in ov.get("rest_periods", cfg.rest_periods)]
+        self._jitter_m = int(ov.get("jitter_minutes", cfg.jitter_minutes))
         self._day_jitter: dict[str, tuple[int, int]] = {}
 
     def _jitter_for(self, day: str, rng: random.Random) -> tuple[int, int]:
         """每天一次性生成 wake/sleep 抖动（分钟）。"""
         if day not in self._day_jitter:
-            j = self._cfg.jitter_minutes
+            j = self._jitter_m
             self._day_jitter[day] = (
                 rng.randint(-j, j) if j else 0,
                 rng.randint(-j, j) if j else 0,
@@ -97,13 +104,14 @@ class LifeController:
         *,
         initial: PresenceState = PresenceState.ACTIVE,
         state_since: datetime | None = None,
+        schedule_override: dict | None = None,
     ) -> None:
         self.life_id = life_id
         self._cfg = cfg
         self._clock = clock
         self._rng = rng
         self._on_change = on_change
-        self._schedule = Schedule(cfg)
+        self._schedule = Schedule(cfg, override=schedule_override)
 
         self._state = initial
         self._state_since = state_since or clock.now()

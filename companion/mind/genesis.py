@@ -401,11 +401,93 @@ def build_life(seed: int, hint: dict | None, mode: str = "random") -> LifeRecord
     """纯构造（不落库、不占资源）：创世与「控制台预览」共用同一条逻辑。"""
     hint = hint or {}
     if mode == "blank":
-        return _blank_record(seed, hint)
-    life = _generate(seed, hint)
-    if mode == "custom":
-        life.origin = "custom"
+        life = _blank_record(seed, hint)
+    else:
+        life = _generate(seed, hint)
+        if mode == "custom":
+            life.origin = "custom"
+    life.schedule = derive_schedule(life)
     return life
+
+
+def derive_schedule(life: LifeRecord) -> dict:
+    """按人设派生**个人作息**（同 seed 可复现；白天全忙碌 / 晚上全犯困的终结者）。
+
+    三个"人味"来源：
+      ① 睡眠类型 ← 大五：开放性高 → 偏夜猫；外向性高 → 偏早鸟（社交作息）；
+      ② 班型     ← canon 里的职业关键词（学生 / 上班族 / 自由职业 / 夜班…），
+                    匹配不到再由 seed 掷一种班型 —— 保证陌生人设也有稳定作息；
+      ③ 规律性   ← 气质 ``regularity`` → 每日抖动幅度：越规律的人越少赖床熬夜。
+    返回 schema 与 ``Schedule(override=...)`` 对齐：wake_at / sleep_at /
+    busy_periods / rest_periods / jitter_minutes。
+    """
+    rng = random.Random(life.seed)
+    bf, tp = life.big_five, life.temperament
+
+    # ① 睡眠类型
+    night_lean = 0.5 + (float(bf.openness) - 0.5) * 0.7 - (float(bf.extraversion) - 0.5) * 0.5
+    night_lean = clamp(night_lean, 0.1, 0.9)
+    roll = rng.random()
+    if roll < night_lean * 0.5:
+        chrono = "night"    # 夜猫：醒得晚睡得晚，没有午休
+        wake, sleep, rest = "09:40", "01:40", []
+    elif roll > 1 - (1 - night_lean) * 0.5:
+        chrono = "early"    # 早鸟：起得早睡得早，有午休
+        wake, sleep, rest = "06:45", "22:45", ["12:30-13:20"]
+    else:
+        chrono = "normal"
+        wake, sleep, rest = "07:25", "23:25", ["13:00-13:50"]
+
+    # ② 班型：先看职业说了什么
+    job_text = str((life.canon or {}).get("职业", "")) + (life.backstory or "")[:40]
+    if any(k in job_text for k in ("学生", "大学", "读书", "考研")):
+        busy = ["08:00-11:50", "14:00-16:30"]
+    elif any(k in job_text for k in ("设计", "程序", "开发", "公司", "会计", "文员", "教师", "老师", "上班")):
+        busy = ["09:20-12:00", "13:40-18:30"]
+    elif any(k in job_text for k in ("自由", "自媒体", "博主", "主播", "写手", "开店", "淘宝")):
+        busy = ["11:00-13:30", "16:00-20:00"]
+    elif any(k in job_text for k in ("夜班", "护士", "酒吧", "便利店", "咖啡")):
+        busy = ["15:00-19:00", "20:30-23:30"]
+    else:
+        # 人设没提职业：由 seed 掷一种班型（确定性）
+        busy = list(rng.choice([
+            ("08:30-12:00", "13:30-17:30"),
+            ("09:30-12:30", "14:30-18:30"),
+            ("10:00-12:00", "14:00-17:00"),
+            ("09:00-12:00", "13:30-19:00"),
+        ]))
+    if chrono == "night":
+        # 夜猫的班型整体后移（夜班职业除外——人家本来就晚上班）
+        busy = [_shift_period(p, 90) for p in busy]
+
+    # ③ 规律性 → 每日抖动（分钟）：规律 0.9 → 13'，随性 0.2 → 32'
+    jitter = round(38 - float(tp.regularity) * 28)
+
+    return {
+        "wake_at": _tweak_time(wake, rng, 25),
+        "sleep_at": _tweak_time(sleep, rng, 25),
+        "busy_periods": busy,
+        "rest_periods": rest,
+        "jitter_minutes": jitter,
+    }
+
+
+def _shift_period(period: str, minutes: int) -> str:
+    """把 "HH:MM-HH:MM" 整体平移若干分钟（跨零点取模）。"""
+    def _sh(s: str) -> str:
+        h, m = (int(x) for x in s.split(":"))
+        t = (h * 60 + m + minutes) % 1440
+        return f"{t // 60:02d}:{t % 60:02d}"
+
+    a, b = period.split("-")
+    return f"{_sh(a)}-{_sh(b)}"
+
+
+def _tweak_time(s: str, rng: random.Random, span: int) -> str:
+    """时间点随机微调 ±span 分钟（同一生命体因 seed 固定而可复现）。"""
+    h, m = (int(x) for x in s.split(":"))
+    t = (h * 60 + m + rng.randint(-span, span)) % 1440
+    return f"{t // 60:02d}:{t % 60:02d}"
 
 
 def assign_bubble_habit(life: LifeRecord) -> str:
