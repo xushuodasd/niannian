@@ -141,3 +141,13 @@ assimilation_rate = 0.05     # 同化（语言/情绪/偏好趋同）速率
 threshold = 0.62             # emotion_intensity × (1-self_control) 越过即上头
 min_interval_minutes = 20    # 两次上头最短间隔
 regret_delay_minutes = 25    # 事后闭环延迟
+# ---- QQ 接入（OneBot v11）------------------------------------------------
+# 需先跑一个 OneBot v11 实现端（推荐 NapCatQQ：无头 NTQQ，官网 https://napneko.github.io）
+# 用小号登录，在网络设置里开启「正向 WebSocket 服务器」（默认端口 3001），再打开 enabled。
+# 一个 QQ 号 = 一个生命体的肉身；多个生命体上号就跑多个 OneBot 实例改端口。
+[qq]
+enabled = false
+ws_url = "ws://127.0.0.1:3001"
+access_token = ""            # OneBot 端设置的鉴权 token（没设就留空）
+life_id = "life_niannian"   # 这个 QQ 号扮演谁（personas/ 里的 life_id）
+allow_users = []              # 允许私聊的 QQ 号白名单，如 [10001, 10002]；空 = 不限

@@ -275,6 +275,22 @@ class AppConfig(BaseModel):
     cognition: CognitionConfig = Field(default_factory=CognitionConfig)
     coalesce: CoalesceConfig = Field(default_factory=CoalesceConfig)
     interrupt: InterruptConfig = Field(default_factory=InterruptConfig)
+    qq: "QQConfig" = Field(default_factory=lambda: QQConfig())
+
+
+class QQConfig(BaseModel):
+    """QQ 接入（OneBot v11，配合 NapCatQQ / LLOneBot 等实现端）。
+
+    一个 OneBot 实例 = 一个 QQ 号 = 一个生命体的"肉身"。
+    需在实现端开启「正向 WebSocket」服务（默认端口 3001）。
+    """
+
+    enabled: bool = False
+    ws_url: str = "ws://127.0.0.1:3001"
+    access_token: str = ""
+    life_id: str = ""                    # 这个 QQ 号扮演的生命体
+    allow_users: list[int] = []          # 允许私聊的 QQ 号白名单；空 = 不限
+    reconnect_s: float = 5.0             # 断线重连间隔（秒，走真实时间不走 Clock）
 
 
 def load_config(path: Path) -> AppConfig:

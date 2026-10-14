@@ -49,11 +49,12 @@ def clamp(x: float, lo: float = 0.0, hi: float = 1.0) -> float:
 # 枚举
 # ======================================================================
 class Channel(str, Enum):
-    """接入渠道。Demo 目前只有 web，其余为后续 IM 预留。"""
+    """接入渠道。Demo 内置 web；qq 走 OneBot v11；其余为后续 IM 预留。"""
 
     WEB = "web"
     CLI = "cli"
     IM = "im"
+    QQ = "qq"
 
 
 class Role(str, Enum):
