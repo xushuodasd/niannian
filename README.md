@@ -1,4 +1,4 @@
-# nianian · 念念
+# niannian · 念念
 
 **English** · [简体中文](README.zh-CN.md)
 
@@ -16,7 +16,7 @@ She works day shifts and sleeps at night; it takes a few messages in a row to wa
 
 ## Why it feels different
 
-Most "AI companion" projects wire a persona prompt to a chat API and call it a day. nianian puts a **deterministic brain** underneath, and calls the LLM only at the very last step — the moment she opens her mouth.
+Most "AI companion" projects wire a persona prompt to a chat API and call it a day. niannian puts a **deterministic brain** underneath, and calls the LLM only at the very last step — the moment she opens her mouth.
 
 - **Rule-driven subconscious** — schedule, wake-up, timing, emotion and habit acquisition are plain code. Fast, cheap, debuggable, reproducible.
 - **LLM only for speech** — one model call per utterance keeps latency and cost low, and avoids the persona drift that comes from multiple models debating each other.

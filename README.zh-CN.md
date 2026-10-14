@@ -1,4 +1,4 @@
-# 念念 nianian
+# 念念 niannian
 
 [English](README.md) · **简体中文**
 
