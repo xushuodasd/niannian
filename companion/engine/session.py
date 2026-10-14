@@ -750,6 +750,9 @@ class SessionManager:
                 "role": m.role.value,
                 "content": m.content,
                 "at": m.created_at.isoformat(timespec="seconds"),
+                # 她的多段连发结构（meta.segments）：前端据此还原成多条气泡；
+                # 用户消息 / 旧数据没有该字段 → null，按整段渲染（兼容无损）。
+                "segments": (m.meta or {}).get("segments") or None,
             })
         return out
 

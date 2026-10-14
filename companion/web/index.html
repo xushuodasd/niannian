@@ -603,7 +603,14 @@
       log.innerHTML = "";
       lastUserMeta = null;   // 旧气泡已随清屏移除，回执锚点作废（重建后由新消息重新挂上）
       const msgs = d.messages || [];
-      msgs.forEach((m) => addBubble(m.role === "user" ? "user" : "her", m.content, false, stamp(m.at)));
+      msgs.forEach((m) => {
+        // 她的多段连发：按落库的 segments 还原成多条气泡（与实时收到的观感一致）
+        if (m.role !== "user" && m.segments && m.segments.length > 1) {
+          m.segments.forEach((t) => addBubble("her", t, false, stamp(m.at)));
+        } else {
+          addBubble(m.role === "user" ? "user" : "her", m.content, false, stamp(m.at));
+        }
+      });
       if (msgs.length) {
         addSystem("以上是历史记录");
         const last = msgs[msgs.length - 1];

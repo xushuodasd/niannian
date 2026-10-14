@@ -157,6 +157,10 @@ class MemoryManager:
             ChatMessage(
                 id=persist_id, life_id=life_id, user_id=user_id,
                 role=Role.ASSISTANT, content=full,
+                # 分段结构随消息落盘（meta.segments）：回显时前端按段还原成多条气泡。
+                # 此前分段只存 round 表而 /api/history 只读 message 表，
+                # 导致"实时连发多条、切页回来糊成一整段"。
+                meta={"segments": [s.text for s in spoken]} if len(spoken) > 1 else {},
             )
         )
         await self._db.add_round(
