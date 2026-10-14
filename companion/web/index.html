@@ -331,7 +331,7 @@
   let historyReady = false;   // 本轮连接的历史是否已铺好（未铺好前，落屏事件先攒着）
   let pending = [];           // 待历史铺好后补渲染的事件（避免被 loadHistory 清屏抹掉）
   // 会被"清屏"影响的落屏事件；其余（state/presence/lives…）即时处理
-  const QUEUE_UNTIL_HISTORY = new Set(["chunk", "message", "notice", "error"]);
+  const QUEUE_UNTIL_HISTORY = new Set(["chunk", "message", "notice", "error", "sticker", "poke"]);
 
   // 当前对话的生命体 + 左栏数据（会话列表 / 每位最近一条消息预览）
   let activeLife = "";
@@ -418,6 +418,37 @@
     log.appendChild(el);
     log.scrollTop = log.scrollHeight;
     return el;
+  }
+  // 她发的表情包：与 addBubble 同构（小圆头像 + 气泡），气泡里放图片；无 url 时退化为文字
+  function addSticker(url, label, at) {
+    clearQuiet();
+    const row = document.createElement("div");
+    row.className = "row her";
+    const a = document.createElement("div");
+    a.className = "mini";
+    a.textContent = initial();
+    row.appendChild(a);
+    const b = document.createElement("div");
+    b.className = "bubble";
+    if (url) {
+      const img = document.createElement("img");
+      img.className = "stickerimg";
+      img.src = url;
+      img.alt = label || "";
+      b.appendChild(img);
+    } else {
+      b.textContent = "（表情）";
+    }
+    row.appendChild(b);
+    if (at) {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = at;
+      row.appendChild(m);
+    }
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+    return b;
   }
   // 打字机：按后端给的 type_ms（这条气泡预计打多久）逐字打出，模拟真人手速
   function typewrite(text, ooc, typeMs) {
@@ -604,9 +635,15 @@
       lastUserMeta = null;   // 旧气泡已随清屏移除，回执锚点作废（重建后由新消息重新挂上）
       const msgs = d.messages || [];
       msgs.forEach((m) => {
-        // 她的多段连发：按落库的 segments 还原成多条气泡（与实时收到的观感一致）
-        if (m.role !== "user" && m.segments && m.segments.length > 1) {
-          m.segments.forEach((t) => addBubble("her", t, false, stamp(m.at)));
+        // 她的多段连发：按落库的 segments 还原成多条气泡（与实时收到的观感一致）。
+        // segments 元素兼容两种格式：旧=字符串（文本气泡），新=对象（text/sticker/poke）。
+        if (m.role !== "user" && m.segments && m.segments.length) {
+          m.segments.forEach((t) => {
+            if (typeof t === "string") { addBubble("her", t, false, stamp(m.at)); return; }
+            if (t && t.type === "sticker") { addSticker(t.url, t.label || "", stamp(m.at)); return; }
+            if (t && t.type === "poke") { addSystem("（她戳了你一下）"); return; }
+            addBubble("her", (t && t.text) || "", false, stamp(m.at));
+          });
         } else {
           addBubble(m.role === "user" ? "user" : "her", m.content, false, stamp(m.at));
         }
@@ -665,6 +702,8 @@
       case "delivered": markDelivered((e.meta && e.meta.count) || 0); break;
       case "notice": addSystem(e.text || ""); break;
       case "error": addSystem(e.text || "出错了"); break;
+      case "poke": addSystem("（她戳了你一下）"); break;
+      case "sticker": addSticker(e.sticker_url, (e.meta && e.meta.label) || ""); break;
       case "lives": renderLives(e.lives || []); break;
     }
   }

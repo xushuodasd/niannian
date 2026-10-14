@@ -34,6 +34,7 @@ from .cognition.llm import EDITABLE_FIELDS, LLMConfig, LLMGateway
 from .cognition.memory import MemoryManager
 from .cognition.responder import CompanionResponder
 from .cognition.retriever import KeywordRetriever
+from .cognition.stickers import StickerLibrary
 from .cognition.teaching import TeachingEngine
 from .engine.bus import EventBus
 from .engine.clock import Clock
@@ -104,6 +105,8 @@ async def run(config: AppConfig) -> None:
     store = LifeStore()
     repo = StateRepo(db)
     settings = SettingsStore((ROOT / config.store.path).parent / "settings.json")
+    # 表情素材库落盘在 data/stickers/<life_id>.json（data/ 已被 .gitignore 忽略）
+    sticker_lib = StickerLibrary(ROOT / "data")
 
     # ---- mind / cognition 层 ------------------------------------------
     llm = LLMGateway(_resolve_llm_config(config, settings), seed=seed)
@@ -112,7 +115,9 @@ async def run(config: AppConfig) -> None:
     memory = MemoryManager(db, llm, config.memory, retriever)
     timing = TimingModel(config.timing)
     expression = ExpressionController(timing, config.timing)
-    responder = CompanionResponder(llm, expression, config.timing)
+    responder = CompanionResponder(
+        llm, expression, config.timing, stickers=sticker_lib, sticker_cfg=config.sticker
+    )
     accountant = MindAccountant(llm)
     learner = CognitionLearner(db, llm, config.cognition)
     teaching = TeachingEngine(db, max_per_round=config.teaching.max_per_round)
@@ -134,6 +139,7 @@ async def run(config: AppConfig) -> None:
         config=config,
         rng=rng,
         db=db,
+        sticker_lib=sticker_lib,
     )
     sessions = SessionManager(deps)
 
@@ -146,7 +152,7 @@ async def run(config: AppConfig) -> None:
     # ---- adapters 层 ---------------------------------------------------
     from .adapters.qq import QQManager
 
-    qq_manager = QQManager(bus)
+    qq_manager = QQManager(bus, poke=config.poke)
     qq_cfg = _resolve_qq_config(config, settings)
     if qq_cfg.enabled:
         try:
@@ -155,7 +161,7 @@ async def run(config: AppConfig) -> None:
             logger.exception("QQ 接入启动失败（检查 qq.life_id 与 OneBot 端点），已跳过")
     app = create_app(
         bus, registry=registry, sessions=sessions, config=config, llm=llm,
-        settings=settings, db=db, qq=qq_manager,
+        settings=settings, stickers=sticker_lib, db=db, qq=qq_manager,
     )
 
     logger.info(

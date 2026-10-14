@@ -178,11 +178,14 @@ class OutgoingEvent(BaseModel):
       - delivered  已读回执（用户消息被"看到"）
       - notice     系统提示（如"对方可能不在"）
       - error      出错提示
+      - sticker    发一张表情包（信道无关：QQ 侧发 image 段，Web 侧渲染 <img>）
+      - poke       戳一戳（信道无关：QQ 侧 send_poke，Web 侧渲染文字气泡）
     """
 
     type: Literal[
         "chunk", "message", "typing", "state", "presence",
         "wake", "delivered", "notice", "error",
+        "sticker", "poke",
     ]
     life_id: str
     user_id: str
@@ -195,6 +198,9 @@ class OutgoingEvent(BaseModel):
     presence: PresenceState | None = None
     typing: bool | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
+    # 表情包事件专用（type="sticker"）：本地稳定 ID + 出站图片 URL
+    sticker_id: str | None = None
+    sticker_url: str | None = None
 
 
 # ======================================================================
@@ -443,6 +449,8 @@ class TurnContext(BaseModel):
     topics_text: str = ""
     # 她已经懂得的事（认知习得产物，blank 体靠它"长大"）
     cognition_text: str = ""
+    # 可用表情包素材块（由 session 填充；空 = 本轮不许发表情）
+    sticker_block: str = ""
     # 命中的候选信念（供 M13 说服力学）
     candidate_beliefs: list[Belief] = Field(default_factory=list)
     # 不完美行为指令（M7）：silence / absent_minded / rhetorical / stammer

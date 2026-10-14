@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
 from ..cognition.llm import EDITABLE_FIELDS, LLMConfig, LLMGateway
+from ..cognition.stickers import StickerLibrary
 from ..engine.bus import TOPIC_CONTROL, TOPIC_INCOMING, TOPIC_OUTBOUND, EventBus
 from ..engine.config import AppConfig, QQConfig
 from ..engine.registry import LifeRegistry
@@ -162,6 +163,7 @@ def create_app(
     config: AppConfig,
     llm: LLMGateway,
     settings: SettingsStore,
+    stickers: StickerLibrary,
     db: Database | None = None,
     qq: Any = None,
 ) -> FastAPI:
@@ -581,6 +583,77 @@ def create_app(
             logger.exception("WebSocket 处理异常")
         finally:
             manager.remove(ws)
+
+    # ==================================================================
+    # 表情包库（14.2）：从绑定的 QQ 收藏表情拉取 + 手填标注（label / tags）
+    # 管理操作走 REST；拉取按 md5(url) 幂等合并，绝不因再拉取丢掉手填信息
+    # ==================================================================
+    def _stickers_json(life_id: str) -> list[dict]:
+        return [s.model_dump(mode="json") for s in stickers.list(life_id)]
+
+    @app.get("/api/stickers")
+    async def get_stickers(life_id: str = "") -> dict:
+        """列出某生命体已有的表情素材（空库是合法状态，返回空列表）。"""
+        if not life_id:
+            return {"ok": False, "error": "缺少 life_id"}
+        return {"ok": True, "stickers": _stickers_json(life_id)}
+
+    @app.post("/api/stickers")
+    async def fetch_stickers(request: Request) -> dict:
+        """从绑定的 QQ 号拉取收藏表情并入库（幂等：已存在的只更新 url）。"""
+        try:
+            data: dict[str, Any] = await request.json()
+        except Exception:
+            return {"ok": False, "error": "请求体不是合法 JSON"}
+        life_id = str(data.get("life_id") or "").strip()
+        if not life_id:
+            return {"ok": False, "error": "缺少 life_id"}
+        action = str(data.get("action") or "fetch")
+        if action != "fetch":
+            return {"ok": False, "error": f"不支持的操作：{action}"}
+        # 未连接判定看的是 QQManager 的可用状态，而不是"表情库为空"——
+        # 空库是合法状态（GET 照常返回空列表），不能与"未连接"混为一谈。
+        if qq is None or not qq.snapshot().get("enabled"):
+            return {"ok": False, "error": "QQ 未连接或未绑定，无法拉取收藏表情"}
+        try:
+            count = int(data.get("count") or 48)
+        except (TypeError, ValueError):
+            count = 48
+        urls = await qq.fetch_custom_faces(count)
+        if not urls:
+            return {"ok": False, "error": "QQ 未连接或未绑定，无法拉取收藏表情"}
+        merge = stickers.merge_from_urls(life_id, urls)
+        logger.info(f"表情库「{life_id}」拉取完成：{merge}")
+        return {"ok": True, "merge": merge, "stickers": _stickers_json(life_id)}
+
+    @app.patch("/api/stickers/{sid}")
+    async def update_sticker(sid: str, request: Request) -> dict:
+        """给一张表情补/改 label 与 tags（模型唯一可见的信息，URL 永不出现在提示词）。"""
+        try:
+            data: dict[str, Any] = await request.json()
+        except Exception:
+            return {"ok": False, "error": "请求体不是合法 JSON"}
+        life_id = str(data.get("life_id") or "").strip()
+        if not life_id:
+            return {"ok": False, "error": "缺少 life_id"}
+        tags = data.get("tags")
+        if isinstance(tags, str):                     # 前端偶尔直接传逗号串，容错切分
+            tags = [t.strip() for t in tags.replace("、", ",").split(",") if t.strip()]
+        elif not isinstance(tags, list):
+            tags = []
+        stk = stickers.update(life_id, sid, str(data.get("label") or ""), tags)
+        if stk is None:
+            return {"ok": False, "error": "未找到该表情"}
+        return {"ok": True, "sticker": stk.model_dump(mode="json")}
+
+    @app.delete("/api/stickers/{sid}")
+    async def delete_sticker(sid: str, life_id: str = "") -> dict:
+        """删除一张表情（只挪本地素材，不影响她的聊天记录 / 记忆）。"""
+        if not life_id:
+            return {"ok": False, "error": "缺少 life_id"}
+        if not stickers.delete(life_id, sid):
+            return {"ok": False, "error": "未找到该表情"}
+        return {"ok": True}
 
     # 静态前端放到最后挂载，避免抢占 /ws 与 /health
     app.mount("/", NoCacheStaticFiles(directory=str(WEB_DIR), html=True), name="web")

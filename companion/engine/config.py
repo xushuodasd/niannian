@@ -241,6 +241,27 @@ class InterruptConfig(BaseModel):
     ]
 
 
+# ---- 表情包（QQ 收藏表情）---------------------------------------------
+class StickerConfig(BaseModel):
+    """她发表情包的行为约束（素材来自该 QQ 号的收藏表情）。"""
+
+    enabled: bool = True
+    max_per_round: int = 1          # 一轮最多发几张
+    min_round_gap: int = 3          # 两次发表情至少隔几轮
+    think_seconds_min: float = 1.0  # 发前"挑表情"的停顿
+    think_seconds_max: float = 2.2
+
+
+# ---- 戳一戳 ------------------------------------------------------------
+class PokeConfig(BaseModel):
+    """戳一戳（主动戳 / 被戳时回戳）的行为约束。"""
+
+    enabled: bool = True
+    cooldown_s: float = 30.0        # 两次戳最短间隔（真实秒）
+    reply_chance: float = 0.5       # QQ 侧被戳时，直接回戳的概率
+    proactive_chance: float = 0.10  # 主动轮里"突然戳一下"的概率
+
+
 # ---- 汇总 -------------------------------------------------------------
 class LLMConfigModel(BaseModel):
     """与 cognition.llm.LLMConfig 字段一致；此处避免反向依赖。"""
@@ -275,6 +296,8 @@ class AppConfig(BaseModel):
     cognition: CognitionConfig = Field(default_factory=CognitionConfig)
     coalesce: CoalesceConfig = Field(default_factory=CoalesceConfig)
     interrupt: InterruptConfig = Field(default_factory=InterruptConfig)
+    sticker: StickerConfig = Field(default_factory=StickerConfig)
+    poke: PokeConfig = Field(default_factory=PokeConfig)
     qq: "QQConfig" = Field(default_factory=lambda: QQConfig())
 
 

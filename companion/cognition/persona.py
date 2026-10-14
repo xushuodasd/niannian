@@ -199,6 +199,9 @@ def build_messages(
     mid = _mid_block(ctx)
     if mid:
         system_parts.append(mid)
+    # 可用表情包素材块：位置对齐"中期块之后、状态块附近"（由 session 填充，空=本轮不许发表情）
+    if ctx.sticker_block:
+        system_parts.append(ctx.sticker_block)
     system_parts.append(_state_block(ctx))
     system_parts.append(_instruction_block(ctx))
 

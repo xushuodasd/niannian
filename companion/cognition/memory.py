@@ -42,6 +42,24 @@ def _stamp(dt: datetime) -> str:
         return ""
 
 
+def _seg_meta(s: Segment) -> dict[str, Any]:
+    """把一条 Segment 转成回显用的结构化 dict（前端据此还原气泡类型）。
+
+    表情 / 戳一戳是信道上独立的气泡，文本段仍存正文；前端须兼容旧的 string 元素。
+    """
+    k = s.meta.get("kind")
+    if k == "sticker":
+        return {
+            "type": "sticker",
+            "id": s.meta.get("sticker_id"),
+            "url": s.meta.get("sticker_url"),
+            "label": s.meta.get("label", ""),
+        }
+    if k == "poke":
+        return {"type": "poke"}
+    return {"type": "text", "text": s.text}
+
+
 class MemoryManager:
     def __init__(
         self,
@@ -153,14 +171,21 @@ class MemoryManager:
             return
         life_id, user_id = ctx.life.life_id, ctx.user_id
         full = " ".join(s.text for s in spoken).strip()
+        # 分段结构随消息落盘（meta.segments）：回显时前端按段还原成多条气泡。
+        # 含表情/戳一戳（特殊气泡）时必存结构化；纯文本单段则不存（兼容旧数据）。
+        has_special = any(s.meta.get("kind") in ("sticker", "poke") for s in spoken)
+        meta = (
+            {"segments": [_seg_meta(s) for s in spoken]}
+            if (len(spoken) > 1 or has_special)
+            else {}
+        )
         await self._db.save_message(
             ChatMessage(
                 id=persist_id, life_id=life_id, user_id=user_id,
                 role=Role.ASSISTANT, content=full,
-                # 分段结构随消息落盘（meta.segments）：回显时前端按段还原成多条气泡。
                 # 此前分段只存 round 表而 /api/history 只读 message 表，
                 # 导致"实时连发多条、切页回来糊成一整段"。
-                meta={"segments": [s.text for s in spoken]} if len(spoken) > 1 else {},
+                meta=meta,
             )
         )
         await self._db.add_round(

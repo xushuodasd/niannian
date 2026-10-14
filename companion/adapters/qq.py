@@ -23,17 +23,19 @@ from __future__ import annotations
 import asyncio
 import itertools
 import json
+import random
+from datetime import datetime
 from typing import Any
 
 import websockets
 from loguru import logger
 
 from ..engine.bus import TOPIC_INCOMING, TOPIC_OUTBOUND, EventBus
-from ..engine.config import QQConfig
-from ..engine.types import Channel, IncomingMessage, OutgoingEvent
+from ..engine.config import PokeConfig, QQConfig
+from ..engine.types import Channel, IncomingMessage, OutgoingEvent, now_dt
 
-# 需要转发到 QQ 的事件：她说的话（分条）、系统旁白、异常兜底文案。
-_FORWARD_KINDS = ("chunk", "notice", "error")
+# 需要转发到 QQ 的事件：她说的话（分条）、系统旁白、异常兜底文案、表情包、戳一戳。
+_FORWARD_KINDS = ("chunk", "notice", "error", "sticker", "poke")
 
 
 def _qq_uid(qq: int | str) -> str:
@@ -44,14 +46,19 @@ def _qq_uid(qq: int | str) -> str:
 class QQAdapter:
     """OneBot v11 正向 WebSocket 客户端（我们主动连 NapCat 等实现端）。"""
 
-    def __init__(self, bus: EventBus, config: QQConfig) -> None:
+    def __init__(
+        self, bus: EventBus, config: QQConfig, poke: PokeConfig | None = None
+    ) -> None:
         self._bus = bus
         self._cfg = config
+        self._poke = poke or PokeConfig()   # 戳一戳行为约束（被戳回戳概率 / 冷却）
         self._ws: Any = None
         self._echo = itertools.count(1)
         self._pending: dict[str, asyncio.Future] = {}
         self._task: asyncio.Task[None] | None = None
         self._stopping = False
+        # 上次"被戳回戳"的时间（真实时间冷却）
+        self._last_reply_poke_at: datetime | None = None
         # 运行状态（供网页配置界面展示）
         self.status = "connecting"      # connecting / connected / reconnecting
         self.bot_uin: int | None = None  # 登录的 QQ 号（这个号的"肉身"）
@@ -127,6 +134,36 @@ class QQAdapter:
             if fut is not None and not fut.done():
                 fut.set_result(data)
             return
+        # 戳一戳入站（notice.notify.poke）：必须在 post_type 提前返回之前处理
+        if (
+            data.get("post_type") == "notice"
+            and data.get("notice_type") == "notify"
+            and data.get("sub_type") == "poke"
+        ):
+            d = data.get("data") or {}
+            uid = int(d.get("user_id") or 0)   # 谁戳的（私聊即对方本人）
+            allow = self._cfg.allow_users
+            # 去自戳 + 白名单（空 = 不限）
+            if uid and uid != self.bot_uin and (not allow or uid in allow):
+                await self._bus.emit(
+                    TOPIC_INCOMING,
+                    IncomingMessage(
+                        life_id=self._cfg.life_id,
+                        user_id=_qq_uid(uid),
+                        content="（对方戳了你一下）",
+                        channel=Channel.QQ,
+                    ),
+                )
+                # 概率回戳 + 冷却（真实时间）
+                if self._poke.enabled and random.random() < self._poke.reply_chance:
+                    now = now_dt()
+                    cd_ok = self._last_reply_poke_at is None or (
+                        now - self._last_reply_poke_at
+                    ).total_seconds() >= self._poke.cooldown_s
+                    if cd_ok:
+                        await self._api("send_poke", {"user_id": uid})
+                        self._last_reply_poke_at = now
+            return
         if data.get("post_type") != "message":
             return  # 心跳 / 元事件等一概不碰
         if data.get("message_type") != "private":
@@ -165,12 +202,22 @@ class QQAdapter:
         kind = event.type if isinstance(event.type, str) else event.type.value
         if kind not in _FORWARD_KINDS:
             return
-        text = (event.text or "").strip()
-        if not text:
-            return
         try:
             qq = int(event.user_id[3:])
         except ValueError:
+            return
+        # 先按 kind 分派，再判 text（sticker 无 text，不能被 text 判空拦掉）
+        if kind == "sticker":
+            await self._api(
+                "send_private_msg",
+                {"user_id": qq, "message": [{"type": "image", "data": {"file": event.sticker_url}}]},
+            )
+            return
+        if kind == "poke":
+            await self._api("send_poke", {"user_id": qq})
+            return
+        text = (event.text or "").strip()
+        if not text:
             return
         await self._api("send_private_msg", {"user_id": qq, "message": text})
 
@@ -224,8 +271,9 @@ class QQManager:
     ``access_token`` 留空时沿用上次的值（界面不回显、也不重复输入）。
     """
 
-    def __init__(self, bus: EventBus) -> None:
+    def __init__(self, bus: EventBus, poke: PokeConfig | None = None) -> None:
         self._bus = bus
+        self._poke = poke or PokeConfig()
         self.adapter: QQAdapter | None = None
         self._last_token = ""
         self._lock = asyncio.Lock()
@@ -239,7 +287,7 @@ class QQManager:
                 cfg = cfg.model_copy(update={"access_token": self._last_token})
             self._last_token = cfg.access_token
             if cfg.enabled and cfg.life_id:
-                self.adapter = QQAdapter(self._bus, cfg)
+                self.adapter = QQAdapter(self._bus, cfg, poke=self._poke)
                 try:
                     await self.adapter.start()
                 except Exception:
@@ -257,6 +305,26 @@ class QQManager:
         snap = self.adapter.snapshot()
         snap["enabled"] = True
         return snap
+
+    async def fetch_custom_faces(self, count: int = 48) -> list[str]:
+        """从 QQ 收藏表情拉取图片 URL 列表（失败/未连接一律返回 []，不抛给调用方）。"""
+        adapter = self.adapter
+        if adapter is None:
+            return []
+        try:
+            resp = await adapter._api_wait("fetch_custom_face", {"count": count})
+            if not isinstance(resp, dict) or resp.get("status") != "ok":
+                return []
+            data = resp.get("data")
+            if isinstance(data, list):
+                return [x for x in data if isinstance(x, str)]
+            if isinstance(data, dict):
+                urls = data.get("urls") or []
+                return [x for x in urls if isinstance(x, str)]
+            return []
+        except Exception as e:
+            logger.debug(f"fetch_custom_faces 失败：{e}")
+            return []
 
     async def stop(self) -> None:
         if self.adapter is not None:

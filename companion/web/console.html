@@ -315,12 +315,14 @@
         <button class="tabbtn" data-tab="profile">人格档案</button>
         <button class="tabbtn" data-tab="cognition">认知</button>
         <button class="tabbtn" data-tab="ops">操作</button>
+        <button class="tabbtn" data-tab="sticker">表情</button>
       </div>
 
       <div class="pane on" id="pane-overview">${overviewHTML(p, g, rel)}</div>
       <div class="pane" id="pane-profile">${profileHTML(p)}</div>
       <div class="pane" id="pane-cognition">${cognitionHTML(p, g)}</div>
-      <div class="pane" id="pane-ops">${opsHTML(p)}</div>`;
+      <div class="pane" id="pane-ops">${opsHTML(p)}</div>
+      <div class="pane" id="pane-sticker">${stickerHTML()}</div>`;
 
     $("pagebody").querySelectorAll(".tabbtn").forEach((b) => b.onclick = () => {
       $("pagebody").querySelectorAll(".tabbtn").forEach((x) => x.classList.toggle("on", x === b));
@@ -329,6 +331,8 @@
     bindProfile();
     bindCognition();
     bindOps();
+    bindStickers();
+    loadStickers();
   }
 
   // 只刷新详情、保留当前标签页（教导/纠错/删除后原地更新，不跳回概览）
@@ -565,6 +569,81 @@
       if (res.ok) { current = null; detail = null; await loadLives(); $("pagebody").innerHTML = '<div class="pane on" style="display:block"><div class="empty" style="padding:40px 0">已删除。从左边选一个生命体，或新生一个。</div></div>'; }
       else alert(res.error);
     };
+  }
+
+  // ================= 表情库 =================
+  function stickerHTML() {
+    return `<div class="card">
+      <h3>表情包</h3>
+      <div class="empty" style="margin-bottom:12px">她的表情来自你绑定 QQ 号的「收藏表情」。拉取后给每张起个名字，她就会照着名字发给你（她看不到图片本身，只认得名字）。</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button class="primary" id="btnFetchStickers">从 QQ 拉取收藏表情</button>
+        <span class="empty" id="stickerAlert"></span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px"><h3>表情库</h3>
+      <div class="empty" id="stickerBox">加载中…</div>
+    </div>`;
+  }
+
+  async function loadStickers() {
+    const box = $("stickerBox");
+    if (!box) return;
+    const res = await api("/api/stickers?life_id=" + encodeURIComponent(current));
+    const list = (res && res.stickers) || [];
+    if (!list.length) {
+      box.className = "empty";
+      box.textContent = "还没有表情。点上方按钮从绑定的 QQ 号拉取收藏表情，然后给它们起个名字（她会照着名字发给你）";
+      bindStickers();
+      return;
+    }
+    box.className = "";
+    box.innerHTML = list.map((s) => `
+      <div class="cog" data-sid="${esc(s.id)}" style="display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;align-items:start;padding:10px 0">
+        <img class="stickerimg" src="${esc(s.url)}" alt="${esc(s.label || "")}" style="width:96px;height:96px;object-fit:cover" />
+        <div>
+          <div class="field"><label>名字（她照着发）</label><input class="sk-label" value="${esc(s.label || "")}" placeholder="例如：摸摸头" /></div>
+          <div class="field"><label>标签（逗号分隔）</label><input class="sk-tags" value="${esc((s.tags || []).join(", "))}" placeholder="安慰, 摸头" /></div>
+          <div style="display:flex;gap:8px">
+            <button class="primary sk-save">保存</button>
+            <button class="danger sk-del">删除</button>
+          </div>
+        </div>
+      </div>`).join("");
+    bindStickers();
+  }
+
+  function bindStickers() {
+    const fetchBtn = $("btnFetchStickers");
+    if (fetchBtn) fetchBtn.onclick = async () => {
+      const al = $("stickerAlert");
+      al.textContent = "正在拉取…";
+      fetchBtn.disabled = true;
+      const res = await post("/api/stickers", { life_id: current, action: "fetch" });
+      fetchBtn.disabled = false;
+      if (!res.ok) { al.textContent = res.error || "拉取失败"; return; }
+      const m = res.merge || {};
+      al.textContent = `已拉取：新增 ${m.added ?? 0} 张，保留 ${m.kept ?? 0} 张`;
+      await loadStickers();
+    };
+    const box = $("stickerBox");
+    if (!box) return;
+    box.querySelectorAll(".cog").forEach((row) => {
+      const sid = row.dataset.sid;
+      const al = () => $("stickerAlert");
+      row.querySelector(".sk-save").onclick = async () => {
+        const label = row.querySelector(".sk-label").value.trim();
+        const tags = row.querySelector(".sk-tags").value.split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+        const res = await patch("/api/stickers/" + encodeURIComponent(sid), { life_id: current, label, tags });
+        const a = al(); if (a) a.textContent = res.ok ? "已保存" : (res.error || "保存失败");
+      };
+      row.querySelector(".sk-del").onclick = async () => {
+        if (!confirm("删除这张表情？她将不再能发它。")) return;
+        const res = await api("/api/stickers/" + encodeURIComponent(sid) + "?life_id=" + encodeURIComponent(current), { method: "DELETE" });
+        if (res.ok) { await loadStickers(); }
+        else { const a = al(); if (a) a.textContent = res.error || "删除失败"; }
+      };
+    });
   }
 
   // ================= 创建 =================

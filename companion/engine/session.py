@@ -21,6 +21,7 @@ from loguru import logger
 from ..cognition.learning import CognitionLearner
 from ..cognition.memory import MemoryManager
 from ..cognition.responder import CompanionResponder
+from ..cognition.stickers import StickerLibrary
 from ..cognition.teaching import TeachingEngine
 from ..mind import belief as belief_mod
 from ..mind import override as override_mod
@@ -112,6 +113,7 @@ class SessionDeps:
     config: AppConfig
     rng: random.Random
     db: Database
+    sticker_lib: StickerLibrary
 
 
 class Session:
@@ -130,6 +132,9 @@ class Session:
         # 回复意愿闸门：上次"自主不回"的时刻（冷却用）+ 最近一次裁决（调试面板展示）
         self._last_skip_at: datetime | None = None
         self.last_intent: dict[str, Any] = {}
+        # 表情/戳一戳的节流：距上次发表情的轮数 + 上次戳的真实时刻
+        self._rounds_since_sticker = 999
+        self._last_poke_at: datetime | None = None
 
     # ---- 只读状态 ------------------------------------------------------
     @property
@@ -389,6 +394,7 @@ class Session:
         rng = d.rng
         rt = d.registry.require(self.life_id)
         now = clock.now()
+        self._rounds_since_sticker += 1  # 每轮推进，用于"两次发表情至少隔几轮"
 
         # 懒推进一次心理状态（情绪回落 / 自控恢复）
         psyche_mod.tick(rt.psyche, rt.life, now, rt.controller.presence, d.config.relation)
@@ -414,6 +420,19 @@ class Session:
                 )
             )
 
+        # 表情 / 戳一戳：组装 ctx 前算好本轮是否允许（6.6）
+        cfg_s, cfg_p = d.config.sticker, d.config.poke
+        lib = d.sticker_lib.list(self.life_id)
+        allow_sticker = (
+            cfg_s.enabled and bool(lib) and self._rounds_since_sticker >= cfg_s.min_round_gap
+        )
+        sticker_block = d.sticker_lib.build_sticker_block(self.life_id) if allow_sticker else ""
+        cooldown_ok = (
+            self._last_poke_at is None
+            or (now - self._last_poke_at).total_seconds() >= cfg_p.cooldown_s
+        )
+        poke_allowed = cfg_p.enabled and cooldown_ok
+
         ctx = TurnContext(
             life=rt.life,
             psyche=rt.psyche,
@@ -425,8 +444,10 @@ class Session:
             task=effective_task,  # type: ignore[arg-type]
             wake_reason=req.wake_reason,
             imperfection=imperfection,
+            sticker_block=sticker_block,
             meta={"override_flavor": override_flavor, **req.meta} if override_flavor else dict(req.meta),
         )
+        ctx.meta["poke_allowed"] = poke_allowed
         # 睡前/静默状态：不主动回复
         if rt.controller.presence in (PresenceState.OFFLINE, PresenceState.DND):
             logger.debug("不可达状态，静默丢弃本轮")
@@ -499,6 +520,12 @@ class Session:
             history = await d.memory.hydrate(ctx)
             segments = await d.responder.respond(ctx, history, rng)
             regen += 1
+        # 主动轮加分（6.6）：她自己起话头时，偶尔"突然戳一下"对方
+        if effective_task == "proactive" and poke_allowed and rng.random() < cfg_p.proactive_chance:
+            segments.insert(
+                0,
+                Segment(text="（戳了你一下）", typing_seconds=0.6, meta={"kind": "poke"}),
+            )
         d_think = d.timing.think(ctx, sum(len(s.text) for s in segments), rng, speed)
         await clock.sleep(d_think)
         if not segments:
@@ -535,24 +562,53 @@ class Session:
     async def _speak(self, segments: list[Segment], spoken: list[Segment]) -> None:
         d = self._d
         for i, seg in enumerate(segments):
+            kind = seg.meta.get("kind")
             await self._emit(
                 OutgoingEvent(type="typing", life_id=self.life_id, user_id=self.user_id, typing=True)
             )
-            await self._emit(
-                OutgoingEvent(
-                    type="chunk", life_id=self.life_id, user_id=self.user_id,
-                    role=Role.ASSISTANT, message_id=new_id("assist"),
-                    text=seg.text,
-                    meta={
-                        "out_of_character": seg.out_of_character,
-                        # 这条气泡预计"打"多久（毫秒）：前端打字机据此逐字渲染，
-                        # 与后端 holding 的时长对齐，避免前端要么"唰"完、要么中途被截断
-                        "type_ms": int(seg.typing_seconds * 1000),
-                    },
+            if kind == "sticker":
+                # 不 emit chunk，改 emit 特殊事件；时序与 chunk 路径一致：
+                # 先"挑表情"停顿 → emit 表情事件 → 记账 → 收尾
+                await d.clock.sleep(seg.typing_seconds)
+                await self._emit(
+                    OutgoingEvent(
+                        type="sticker", life_id=self.life_id, user_id=self.user_id,
+                        sticker_id=seg.meta.get("sticker_id"),
+                        sticker_url=seg.meta.get("sticker_url"),
+                        meta={"label": seg.meta.get("label", "")},
+                    )
                 )
-            )
-            spoken.append(seg)  # 已吐给前端 = 已"说出口"；此刻起被打断也算数
-            await d.clock.sleep(seg.typing_seconds)
+                spoken.append(seg)
+                sid = seg.meta.get("sticker_id")
+                if sid:
+                    try:
+                        d.sticker_lib.mark_used(self.life_id, sid)
+                    except Exception:
+                        logger.debug("表情使用记账失败")
+                self._rounds_since_sticker = 0
+            elif kind == "poke":
+                await d.clock.sleep(seg.typing_seconds)
+                await self._emit(
+                    OutgoingEvent(type="poke", life_id=self.life_id, user_id=self.user_id)
+                )
+                spoken.append(seg)
+                self._last_poke_at = d.clock.now()
+            else:
+                await self._emit(
+                    OutgoingEvent(
+                        type="chunk", life_id=self.life_id, user_id=self.user_id,
+                        role=Role.ASSISTANT, message_id=new_id("assist"),
+                        text=seg.text,
+                        meta={
+                            "out_of_character": seg.out_of_character,
+                            # 这条气泡预计"打"多久（毫秒）：前端打字机据此逐字渲染，
+                            # 与后端 holding 的时长对齐，避免前端要么"唰"完、要么中途被截断
+                            "type_ms": int(seg.typing_seconds * 1000),
+                        },
+                    )
+                )
+                spoken.append(seg)  # 已吐给前端 = 已"说出口"；此刻起被打断也算数
+                await d.clock.sleep(seg.typing_seconds)
             await self._emit(
                 OutgoingEvent(type="typing", life_id=self.life_id, user_id=self.user_id, typing=False)
             )
