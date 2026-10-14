@@ -424,6 +424,17 @@ def derive_schedule(life: LifeRecord) -> dict:
     rng = random.Random(life.seed)
     bf, tp = life.big_five, life.temperament
 
+    if life.origin == "blank":
+        # 纯洁体：没有职业、没有生活，**无事可忙**——像个初生的意识：
+        # 醒着发呆、到点就困、一天打两场盹，作息也没什么节律可言。
+        return {
+            "wake_at": _tweak_time("08:10", rng, 40),
+            "sleep_at": _tweak_time("21:40", rng, 40),
+            "busy_periods": [],
+            "rest_periods": ["11:30-13:10", "16:20-17:00"],
+            "jitter_minutes": 35,
+        }
+
     # ① 睡眠类型
     night_lean = 0.5 + (float(bf.openness) - 0.5) * 0.7 - (float(bf.extraversion) - 0.5) * 0.5
     night_lean = clamp(night_lean, 0.1, 0.9)

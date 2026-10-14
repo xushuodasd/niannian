@@ -92,9 +92,10 @@ class LifeRegistry:
                 self._store.save(life)
                 logger.info(f"生命体「{life.name}」补齐说话习惯：{life.style.bubble_habit}")
 
-        if not life.schedule:
+        if not life.schedule or (life.origin == "blank" and life.schedule.get("busy_periods")):
             # 老存档/默认体迁移：按人设派生个人作息（一次迁移，落盘固化）。
-            # 此前所有生命体共用全局 config 一张作息表——"白天都忙碌、晚上都犯困"。
+            # 此前所有生命体共用全局 config 一张作息表——"白天都忙碌、晚上都犯困"；
+            # blank 修正条件：纯洁体不该有班型（无事可忙），老迁移带上班的要重派生。
             from ..mind.genesis import derive_schedule
 
             life.schedule = derive_schedule(life)
