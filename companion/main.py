@@ -49,7 +49,7 @@ from .store.life_store import LifeStore
 from .store.repo import StateRepo
 from .store.settings import SettingsStore
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent  # 项目根 KKcc（config/data/personas 都在根）
 CONFIG_PATH = ROOT / "config.toml"
 
 

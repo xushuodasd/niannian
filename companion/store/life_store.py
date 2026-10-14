@@ -21,7 +21,7 @@ from ..engine.types import (
     Temperament,
 )
 
-PERSONAS_DIR = Path(__file__).resolve().parent.parent / "personas"
+PERSONAS_DIR = Path(__file__).resolve().parent.parent.parent / "personas"  # 项目根 KKcc/personas
 
 
 class LifeStore:

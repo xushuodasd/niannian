@@ -8,10 +8,10 @@ __pycache__/
 venv/
 
 # 运行时用户数据：数据库 / 备份 / settings.json（含 API Key，严禁入库）
-companion/data/
+/data/
 
 # 生命体存档（运行时生成的用户数据；默认人格由代码 default_life() 兜底，丢失无损）
-companion/personas/
+/personas/
 
 # 日志与临时文件
 *.log
