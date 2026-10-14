@@ -13,7 +13,7 @@ from loguru import logger
 from ..cognition.llm import LLMGateway
 from ..cognition.persona import build_mind_messages, build_reply_intent_messages
 from ..engine.config import ReplyIntentConfig
-from ..engine.types import TurnContext
+from ..engine.types import LifeRecord, TurnContext
 from . import belief as belief_mod
 
 # 简易中文情感词典（本地兜底用；真实场景交给小模型）
@@ -66,6 +66,87 @@ class MindAccountant:
         if not result.get("persuasion"):
             result["persuasion"] = fallback["persuasion"]
         return result
+
+
+# ======================================================================
+# AI 排作息：新生生命体时由心智模型按人设定制作息（一次 JSON 调用）
+# ======================================================================
+
+def _valid_hhmm(s: Any) -> bool:
+    try:
+        h, m = str(s).split(":")
+        return 0 <= int(h) < 24 and 0 <= int(m) < 60
+    except Exception:
+        return False
+
+
+def _valid_period(s: Any) -> bool:
+    try:
+        a, b = str(s).split("-")
+        return _valid_hhmm(a) and _valid_hhmm(b)
+    except Exception:
+        return False
+
+
+async def arrange_schedule(llm: LLMGateway, life: LifeRecord) -> dict[str, Any] | None:
+    """给新生生命体**按人设定制作息**（取代纯关键词规则的固定班型）。
+
+    规则派生（``genesis.derive_schedule``）仍是兜底：调用失败 / JSON 非法 /
+    mock 无模型时返回 ``None``，由调用方沿用人格自带的规则作息。
+    """
+    persona_lines = [
+        f"姓名：{life.name}　性别：{life.gender}",
+        f"大五人格：{life.big_five.describe()}",
+        f"依恋风格：{getattr(life.attachment, 'value', life.attachment)}",
+        f"气质规律性：{life.temperament.regularity:.2f}（越高越规律）",
+    ]
+    job = (life.canon or {}).get("职业") or ""
+    if job:
+        persona_lines.append(f"职业：{job}")
+    if life.backstory:
+        persona_lines.append(f"背景：{life.backstory[:200]}")
+    messages = [
+        {"role": "system", "content": (
+            "你在为一个虚拟生命体排每日作息。依据她的职业与人格，排出符合现实常识的作息："
+            "开放性高可能是夜猫、外向性高偏早鸟；忙碌时段贴合职业（学生课表/上班族朝九晚六/"
+            "自由职业错峰/夜班晚起）；气质越规律每日抖动越小。只输出 JSON，不要解释。"
+        )},
+        {"role": "user", "content": "\n".join(persona_lines) + (
+            "\n\n请输出：\n"
+            '{"wake_at":"HH:MM","sleep_at":"HH:MM","busy_periods":["HH:MM-HH:MM"],"rest_periods":["HH:MM-HH:MM"],"jitter_minutes":20}\n'
+            "约束：sleep_at 可跨零点；busy_periods 0~3 段；rest_periods 是打盹时段、可为空数组；"
+            "jitter_minutes 为 5~60 的整数。"
+        )},
+    ]
+    try:
+        result = await llm.json(messages)
+    except Exception:
+        logger.exception("AI 排作息调用失败")
+        return None
+    if not isinstance(result, dict):
+        return None
+    wake, sleep = result.get("wake_at"), result.get("sleep_at")
+    busy = result.get("busy_periods") or []
+    rest = result.get("rest_periods") or []
+    jitter = result.get("jitter_minutes", 20)
+    ok = (
+        _valid_hhmm(wake) and _valid_hhmm(sleep)
+        and isinstance(busy, list) and all(_valid_period(p) for p in busy)
+        and isinstance(rest, list) and all(_valid_period(p) for p in rest)
+    )
+    if not ok:
+        logger.warning(f"AI 排作息格式非法，回落规则作息：{str(result)[:200]}")
+        return None
+    try:
+        jitter = max(5, min(60, int(jitter)))
+    except (TypeError, ValueError):
+        jitter = 20
+    return {
+        "wake_at": str(wake), "sleep_at": str(sleep),
+        "busy_periods": [str(p) for p in busy],
+        "rest_periods": [str(p) for p in rest],
+        "jitter_minutes": jitter,
+    }
 
 
 # ======================================================================

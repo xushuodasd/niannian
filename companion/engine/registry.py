@@ -55,10 +55,12 @@ class LifeRegistry:
         bus: EventBus,
         rng: random.Random,
         db: Database | None = None,
+        llm: "LLMGateway | None" = None,
     ) -> None:
         self._store = store
         self._repo = repo
         self._db = db  # 级联删除 / 控制台统计用（可选，便于单测）
+        self._llm = llm  # 创世时让心智模型按人设排作息（可选；无则用规则派生）
         self._cfg = config
         self._clock = clock
         self._bus = bus
@@ -202,6 +204,21 @@ class LifeRegistry:
         from ..mind.genesis import genesis  # 延迟导入避免循环
 
         life = await genesis(int(seed), hint=hint, cfg=self._cfg.genesis, mode=mode)
+        # 作息升级：规则版是兜底；LLM 可用时让心智模型按人设精排一次（失败静默回落）。
+        # 纯洁体不参与——"无事可忙"是硬语义，不交给模型自由发挥。
+        if self._llm is not None and getattr(self._llm, "mode", "mock") != "mock" and life.origin != "blank":
+            from ..mind.mind_llm import arrange_schedule
+
+            try:
+                ai_schedule = await arrange_schedule(self._llm, life)
+                if ai_schedule:
+                    life.schedule = ai_schedule
+                    logger.info(
+                        f"新生生命体「{life.name}」作息由 AI 按人设排定："
+                        f"{ai_schedule['wake_at']} 起 / {ai_schedule['sleep_at']} 睡"
+                    )
+            except Exception:
+                logger.exception("AI 排作息失败，沿用规则作息")
         self._store.save(life)
         await self.ensure(life.life_id)
         logger.info(f"新生生命体「{life.name}」mode={mode} seed={seed}")

@@ -128,6 +128,7 @@ class OpenAIBackend(_Backend):
         if config.base_url:
             kwargs["base_url"] = config.base_url
         self._client = AsyncOpenAI(**kwargs)
+        self._json_max_tokens = max(2048, int(config.max_tokens))
 
     async def stream(
         self,
@@ -161,14 +162,25 @@ class OpenAIBackend(_Backend):
         model: str,
         mock_hint: dict[str, Any] | None,
     ) -> dict[str, Any]:
+        # max_tokens 不再硬编码 512：推理型模型（先思考后作答）会把小额配额
+        # 全部耗在思考上，正文 content 为空 → 静默退化成 "{}"，所有心理核算
+        # 全部走本地兜底。给足配额，并让空返回留下可诊断的日志。
         resp = await self._client.chat.completions.create(
             model=model,
             messages=messages,  # type: ignore[arg-type]
             temperature=0.3,
-            max_tokens=512,
+            max_tokens=self._json_max_tokens,
             response_format={"type": "json_object"},
+            # 推理型模型（先思考后作答）：这类小 JSON 核算不需要思考链，
+            # 关掉以免思考吃光配额、正文为空。不认识该参数的端点会忽略。
+            extra_body={"thinking": {"type": "disabled"}},
         )
-        text = resp.choices[0].message.content or "{}"
+        text = (resp.choices[0].message.content or "").strip()
+        if not text:
+            finish = getattr(resp.choices[0], "finish_reason", "?")
+            logger.warning(f"JSON 调用正文为空（finish_reason={finish}，"
+                           f"max_tokens={self._json_max_tokens}）——模型可能在思考上耗尽配额")
+            return {}
         try:
             return json.loads(text)
         except json.JSONDecodeError:

@@ -304,8 +304,12 @@ def reply_willingness(
     self_control = state.self_control               # 0..1
     trust = rel.trust                               # 0..1
     intimacy = rel.intimacy                         # 0..1
-    negativity = negativity_of(user_text)           # 0..1
-    burst = clamp(max(0, batch_count - 1) / 3.0)    # 1 条=0；4 条及以上=1
+    negativity = negativity_of(user_text)             # 0..1
+    # 刷屏惩罚只针对"密集短消息轰炸"（在吗/喂/???）——连发长句是掏心窝子，不是骚扰。
+    # 平均每条字数越多 → earnest 越高 → 惩罚最多打 2 折（保留一点"话太密"的真实疲态）。
+    avg_len = len(user_text) / max(1, batch_count)
+    earnest = clamp((avg_len - 8.0) / 30.0)           # ≤8 字/条=纯催促；≥38 字/条=认真长谈
+    burst = clamp(max(0, batch_count - 1) / 3.0) * (1.0 - 0.8 * earnest)
     late_night = 1.0 if (now.hour >= 23 or now.hour < 6) else (0.4 if now.hour == 22 else 0.0)
 
     score = (

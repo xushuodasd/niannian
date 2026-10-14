@@ -91,8 +91,8 @@ async def run(config: AppConfig) -> None:
     settings = SettingsStore((ROOT / config.store.path).parent / "settings.json")
 
     # ---- mind / cognition 层 ------------------------------------------
-    registry = LifeRegistry(store, repo, config, clock, bus, rng, db=db)
     llm = LLMGateway(_resolve_llm_config(config, settings), seed=seed)
+    registry = LifeRegistry(store, repo, config, clock, bus, rng, db=db, llm=llm)
     retriever = KeywordRetriever(db, half_life_days=config.memory.recall_half_life_days)
     memory = MemoryManager(db, llm, config.memory, retriever)
     timing = TimingModel(config.timing)
