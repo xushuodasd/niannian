@@ -11,15 +11,29 @@
      这里只留"孕育生命体"这一页自己的内容样式与创建弹层。 */
   #count { margin-left: auto; }
 
-  /* ---- 右：详情 ---- */
-  .detail-head { padding: 20px 24px 14px; border-bottom: 1px solid var(--line); }
-  .detail-head .line1 { display: flex; align-items: center; gap: 12px; }
-  .bigav {
-    width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
-    background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 21px; flex: none;
+  /* ---- 右：角色档案卡 ---- */
+  .hero {
+    display: flex; align-items: center; gap: 18px;
+    padding: 24px 24px 20px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(135deg, rgba(242, 230, 217, .55), rgba(250, 249, 247, 0) 58%);
   }
-  .detail-head h2 { margin: 0; font-size: 20px; font-weight: 600; }
-  .detail-head .sub { color: var(--text-3); font-size: 12.5px; margin-top: 2px; }
+  .hero .bigav {
+    width: 72px; height: 72px; font-size: 30px; flex: none;
+    border: 2px solid var(--accent-soft);
+    box-shadow: 0 0 0 5px rgba(192, 120, 63, .06), 0 12px 30px -18px rgba(150, 90, 40, .5);
+  }
+  .hero .who { min-width: 0; }
+  .hero .who h2 { margin: 0 0 5px; font-size: 21px; font-weight: 600; display: flex; align-items: center; gap: 9px; }
+  .hero .who h2 .dot { flex: none; }
+  .hero .who .sub { color: var(--text-2); font-size: 13px; line-height: 1.55; }
+  .hero .stats { margin-left: auto; display: flex; gap: 30px; text-align: center; flex: none; }
+  .hero .stats .num { font-size: 21px; font-weight: 600; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .hero .stats .cap { font-size: 11.5px; color: var(--text-3); margin-top: 3px; }
+  /* 创建弹层预览头像（hero 之外的 bigav） */
+  .bigav {
+    width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 22px; flex: none;
+  }
   .tabs { display: flex; gap: 4px; padding: 12px 24px 0; border-bottom: 1px solid var(--line); }
   .tabbtn {
     border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px;
@@ -68,7 +82,9 @@
   .qqwho { margin-left: auto; color: var(--text-2); font-size: 12.5px; }
 
   @media (max-width: 760px) {
-    .pane, .detail-head, .tabs { padding-left: 14px; padding-right: 14px; }
+    .pane, .hero, .tabs { padding-left: 14px; padding-right: 14px; }
+    .hero { flex-wrap: wrap; }
+    .hero .stats { margin-left: 0; width: 100%; justify-content: space-between; }
   }
 </style>
 </head>
@@ -275,29 +291,35 @@
   // ================= 详情 =================
   function renderDetail() {
     const p = detail.profile, g = detail.growth, rel = detail.relationship;
-    const emo = p.emotional || {};
+    const genderCN = { female: "她", male: "他", neutral: "TA" }[p.gender] || p.gender;
+    const born = (p.born_at || "").slice(0, 10);
     $("main").innerHTML = `
-      <div class="detail-head">
-        <div class="line1">
-          <div class="bigav">${esc(p.avatar || "?")}</div>
-          <div>
-            <h2>${esc(p.name)} <span class="tag ${p.origin}">${ORIGIN_CN[p.origin] || p.origin}</span></h2>
-            <div class="sub">${esc(p.gender)} · ${esc(p.life_id)} · 诞生于 ${esc((p.born_at || "").slice(0, 16).replace("T", " "))}</div>
-          </div>
+      <div class="hero">
+        <div class="bigav">${esc(p.avatar || "?")}</div>
+        <div class="who">
+          <h2>${esc(p.name)}
+            <span class="tag ${p.origin}">${ORIGIN_CN[p.origin] || p.origin}</span>
+            <span class="dot ${p.presence}" title="${PRESENCE_CN[p.presence] || p.presence}"></span>
+          </h2>
+          <div class="sub">${PRESENCE_CN[p.presence] || p.presence} · ${esc(p.mood_label || "")}</div>
+          <div class="sub" style="color:var(--text-3)">${esc(p.canon && p.canon["职业"] || "还没有职业，等着随经历长出来")} · 生日 ${esc(born)} · ${genderCN}</div>
+        </div>
+        <div class="stats">
+          <div><div class="num">${g.rounds ?? 0}</div><div class="cap">对话轮数</div></div>
+          <div><div class="num">${g.cognition_count ?? 0}</div><div class="cap">认知条数</div></div>
+          <div><div class="num" style="font-size:17px;padding-top:3px">${rel ? esc(rel.stage) : "—"}</div><div class="cap">你们的关系</div></div>
         </div>
       </div>
       <div class="tabs">
         <button class="tabbtn on" data-tab="overview">概览</button>
         <button class="tabbtn" data-tab="profile">人格档案</button>
         <button class="tabbtn" data-tab="cognition">认知</button>
-        <button class="tabbtn" data-tab="growth">成长轨迹</button>
         <button class="tabbtn" data-tab="ops">操作</button>
       </div>
 
       <div class="pane on" id="pane-overview">${overviewHTML(p, g, rel)}</div>
       <div class="pane" id="pane-profile">${profileHTML(p)}</div>
       <div class="pane" id="pane-cognition">${cognitionHTML(p, g)}</div>
-      <div class="pane" id="pane-growth">${growthHTML(p, g, rel)}</div>
       <div class="pane" id="pane-ops">${opsHTML(p)}</div>`;
 
     $("main").querySelectorAll(".tabbtn").forEach((b) => b.onclick = () => {
@@ -335,7 +357,7 @@
       <div class="card"><h3>她是谁</h3>
         ${awarenessLine(p)}
         <div class="kv"><span class="k">状态</span><span class="v">${PRESENCE_CN[p.presence] || p.presence || "—"} · ${esc(p.mood_label || "")}</span></div>
-        <div class="kv"><span class="k">当前位置</span><span class="v">${esc(p.canon && p.canon["职业"] || "—")}</span></div>
+        <div class="kv"><span class="k">职业</span><span class="v">${esc(p.canon && p.canon["职业"] || "—")}</span></div>
         <div class="kv"><span class="k">宠物</span><span class="v">${esc(p.canon && p.canon["宠物"] || "—")}</span></div>
         <div style="margin-top:10px;color:var(--text-2);font-size:13px">${esc(p.backstory || "（还没有背景——她会随经历慢慢长出来）")}</div>
       </div>
@@ -427,31 +449,6 @@
     alert.className = "alert on " + (res.ok ? "ok" : "err");
     alert.textContent = res.ok ? "已保存" : (res.error || "保存失败");
     if (res.ok) { await loadLives(); await selectLife(current); }
-  }
-
-  function growthHTML(p, g, rel) {
-    const cog = g.cognition || [];
-    return `<div class="grid">
-      <div class="card"><h3>成长进度</h3>
-        ${awarenessLine(p)}
-        <div class="kv"><span class="k">习得认知</span><span class="v">${g.cognition_count} 条</span></div>
-        <div class="kv"><span class="k">三观</span><span class="v">${(p.beliefs || []).length} 条</span></div>
-        <div class="kv"><span class="k">对话轮数</span><span class="v">${g.rounds} 轮</span></div>
-        <div class="kv"><span class="k">与对方关系</span><span class="v">${rel ? esc(rel.stage) : "—"}</span></div>
-      </div>
-      <div class="card" style="grid-column:1/-1"><h3>她已经懂的事（认知习得）</h3>
-        ${cog.length ? cog.map((c) => `<div class="cog">
-            <div class="t">${esc(c.topic)} <span class="m">· 确信度 ${Number(c.confidence).toFixed(2)} · 接触 ${c.exposure_count} 次</span></div>
-            <div class="u">${esc(c.understanding)}</div>
-          </div>`).join("") : '<div class="empty">还没有学到什么——多和她聊聊，认知会长出来。</div>'}
-      </div>
-      <div class="card" style="grid-column:1/-1"><h3>三观（信念）</h3>
-        ${(p.beliefs || []).length ? (p.beliefs || []).map((b) => `<div class="belief">
-            <div><span class="t">${esc(b.topic)}</span> ${esc(b.statement)}${b.identity_locked ? ' <span class="chip">核心</span>' : ""}</div>
-            <div class="bar"><i style="width:${Math.round((b.confidence||0)*100)}%"></i></div>
-          </div>`).join("") : '<div class="empty">还没有形成三观（纯洁体会随反复相处慢慢长出）。</div>'}
-      </div>
-    </div>`;
   }
 
   function cognitionHTML(p, g) {
