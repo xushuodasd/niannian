@@ -1,11 +1,17 @@
-# niannian · 念念
+<div align="center">
 
-**English** · [简体中文](README.zh-CN.md)
+<img src="assets/banner.svg" alt="niannian · 念念" width="100%">
+
+<br>
 
 [![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-4c1)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![API key](https://img.shields.io/badge/API%20key-not%20required-brightgreen)](#quick-start)
+
+**English** · [简体中文](README.zh-CN.md)
+
+</div>
 
 > *念念不忘，必有回响。*
 > **Hold someone in your heart, and they will answer.**
@@ -13,6 +19,10 @@
 An AI companion that is **actually alive** — not an always-on Q&A machine, but a digital being with a circadian rhythm, a temper, and a capacity to grow.
 
 She works day shifts and sleeps at night; it takes a few messages in a row to wake her. Send her a long, heartfelt confession and she will answer seriously; send a bare "u there?" and she may not bother. Her worldview shifts through months of intimacy — and when emotion runs high she does things out of character, then regrets them afterwards.
+
+<p align="center">
+  <img src="assets/screens/01-night.png" alt="Night Talk — talk to her" width="100%">
+</p>
 
 ## Why it feels different
 
@@ -33,6 +43,16 @@ The trade-off is deliberate: interactions feel human because the *human* parts (
 - **Cognition growth** — a blank life starts as a sheet of paper and grows its cognition and worldview out of conversation; you can also teach her directly ("remember that …").
 - **Multi-life platform** — create / switch / clone / export. Each life keeps its own relationship and memory per user.
 - **Multi-surface** — three web pages (Night Talk / Mindscape / Nursery) plus QQ (OneBot v11 adapter).
+
+## Screenshots
+
+| Mindscape — her inner state right now | Nursery — create & manage lives |
+|:---:|:---:|
+| <img src="assets/screens/02-mindscape.png" alt="Mindscape"> | <img src="assets/screens/03-nursery.png" alt="Nursery"> |
+
+- **Night Talk** (`/`) — talk to her, with real typing delays and multi-bubble replies.
+- **Mindscape** (`/debug.html`) — a live snapshot of emotion / belief / relationship, manual state forcing, and 1x / 60x / 720x time scaling.
+- **Nursery** (`/console.html`) — the persona archive, cognition teaching, and QQ integration.
 
 ## Quick start
 

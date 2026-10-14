@@ -1,17 +1,27 @@
-# 念念 niannian
+<div align="center">
 
-[English](README.md) · **简体中文**
+<img src="assets/banner.svg" alt="念念 niannian" width="100%">
+
+<br>
 
 [![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-4c1)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![API key](https://img.shields.io/badge/API%20key-not%20required-brightgreen)](#快速开始)
 
+[English](README.md) · **简体中文**
+
+</div>
+
 > 念念不忘，必有回响。
 >
 > 一个**活着的** AI 陪伴系统：不是随叫随到的问答机，而是有生物钟、有脾气、会成长、能被改变的数字生命体。
 
 深夜台灯下的她——白天要上班，晚上要睡觉，消息连发几条才吵得醒；你掏心窝子说一大段她会认真回，你只发"在吗"她可能懒得理；三观会随长期相处被改变，情绪上头会做反常的事、事后又后悔。
+
+<p align="center">
+  <img src="assets/screens/01-night.png" alt="夜话 · 和她说说话" width="100%">
+</p>
 
 ## 它和"套壳聊天机器人"有什么不同
 
@@ -32,6 +42,16 @@
 - **认知成长**——纯洁体从"一张白纸"起步，靠对话长出认知与三观；也可直接教她（"记住……"）。
 - **多生命体平台**——创建 / 切换 / 克隆 / 导出，每个生命体对每个用户独立积累关系与记忆。
 - **多端接入**——Web 三页（夜话 / 心象 / 孕育）+ QQ（OneBot v11 协议适配）。
+
+## 界面
+
+| 心象 · 她此刻的内心 | 孕育 · 创建与管理生命体 |
+|:---:|:---:|
+| <img src="assets/screens/02-mindscape.png" alt="心象"> | <img src="assets/screens/03-nursery.png" alt="孕育"> |
+
+- **夜话**（`/`）——和她说说话，真实的打字延迟与分条连发。
+- **心象**（`/debug.html`）——情绪 / 信念 / 关系的实时快照，可强制切状态、时间倍速 1x / 60x / 720x。
+- **孕育**（`/console.html`）——人格档案、认知教导、QQ 接入配置。
 
 ## 快速开始
 
