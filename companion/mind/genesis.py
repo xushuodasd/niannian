@@ -427,12 +427,14 @@ def derive_schedule(life: LifeRecord) -> dict:
     if life.origin == "blank":
         # 纯洁体：没有职业、没有生活，**无事可忙**——像个初生的意识：
         # 醒着发呆、到点就困、一天打两场盹，作息也没什么节律可言。
+        # 醒着的时候没事可干，消息基本秒回。
         return {
             "wake_at": _tweak_time("08:10", rng, 40),
             "sleep_at": _tweak_time("21:40", rng, 40),
             "busy_periods": [],
             "rest_periods": ["11:30-13:10", "16:20-17:00"],
             "jitter_minutes": 35,
+            "busy_reply": "quick",
         }
 
     # ① 睡眠类型
@@ -474,12 +476,23 @@ def derive_schedule(life: LifeRecord) -> dict:
     # ③ 规律性 → 每日抖动（分钟）：规律 0.9 → 13'，随性 0.2 → 32'
     jitter = round(38 - float(tp.regularity) * 28)
 
+    # ④ 忙时回信档位：职业性质为主（工作能不能随时看手机），外向爱社交的提一档
+    if any(k in job_text for k in ("运营", "客服", "自由", "自媒体", "博主", "主播", "写手", "开店", "淘宝", "销售", "店员")):
+        busy_reply = "quick"
+    elif any(k in job_text for k in ("医生", "护士", "教师", "老师", "司机", "手术", "飞行", "律师", "实验")):
+        busy_reply = "slow"
+    else:
+        busy_reply = rng.choice(["quick", "normal", "normal", "slow"])
+    if busy_reply == "normal" and float(bf.extraversion) > 0.72:
+        busy_reply = "quick"  # 外向话痨：忍不住摸鱼回消息
+
     return {
         "wake_at": _tweak_time(wake, rng, 25),
         "sleep_at": _tweak_time(sleep, rng, 25),
         "busy_periods": busy,
         "rest_periods": rest,
         "jitter_minutes": jitter,
+        "busy_reply": busy_reply,
     }
 
 

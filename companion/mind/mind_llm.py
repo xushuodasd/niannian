@@ -109,13 +109,18 @@ async def arrange_schedule(llm: LLMGateway, life: LifeRecord) -> dict[str, Any] 
         {"role": "system", "content": (
             "你在为一个虚拟生命体排每日作息。依据她的职业与人格，排出符合现实常识的作息："
             "开放性高可能是夜猫、外向性高偏早鸟；忙碌时段贴合职业（学生课表/上班族朝九晚六/"
-            "自由职业错峰/夜班晚起）；气质越规律每日抖动越小。只输出 JSON，不要解释。"
+            "自由职业错峰/夜班晚起；也可以几乎不设忙碌时段，比如自由职业、无业、退休）；"
+            "气质越规律每日抖动越小。另需判断 busy_reply（忙时回信档位）："
+            "quick=工作性质允许随时看手机（运营/客服/自由职业/店员），忙也基本秒回；"
+            "normal=一般上班族；slow=深度工作不能分心（医生/授课/司机/实验）。"
+            "只输出 JSON，不要解释。"
         )},
         {"role": "user", "content": "\n".join(persona_lines) + (
             "\n\n请输出：\n"
-            '{"wake_at":"HH:MM","sleep_at":"HH:MM","busy_periods":["HH:MM-HH:MM"],"rest_periods":["HH:MM-HH:MM"],"jitter_minutes":20}\n'
-            "约束：sleep_at 可跨零点；busy_periods 0~3 段；rest_periods 是打盹时段、可为空数组；"
-            "jitter_minutes 为 5~60 的整数。"
+            '{"wake_at":"HH:MM","sleep_at":"HH:MM","busy_periods":["HH:MM-HH:MM"],"rest_periods":["HH:MM-HH:MM"],"jitter_minutes":20,"busy_reply":"normal"}\n'
+            "约束：sleep_at 可跨零点；busy_periods 0~3 段（工作很自由可为空数组）；"
+            "rest_periods 是打盹时段、可为空数组；jitter_minutes 为 5~60 的整数；"
+            "busy_reply 只能是 quick / normal / slow 之一。"
         )},
     ]
     try:
@@ -129,6 +134,9 @@ async def arrange_schedule(llm: LLMGateway, life: LifeRecord) -> dict[str, Any] 
     busy = result.get("busy_periods") or []
     rest = result.get("rest_periods") or []
     jitter = result.get("jitter_minutes", 20)
+    busy_reply = result.get("busy_reply", "normal")
+    if busy_reply not in ("quick", "normal", "slow"):
+        busy_reply = "normal"
     ok = (
         _valid_hhmm(wake) and _valid_hhmm(sleep)
         and isinstance(busy, list) and all(_valid_period(p) for p in busy)
@@ -146,6 +154,7 @@ async def arrange_schedule(llm: LLMGateway, life: LifeRecord) -> dict[str, Any] 
         "busy_periods": [str(p) for p in busy],
         "rest_periods": [str(p) for p in rest],
         "jitter_minutes": jitter,
+        "busy_reply": busy_reply,
     }
 
 

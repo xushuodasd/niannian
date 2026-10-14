@@ -444,7 +444,10 @@ class Session:
 
         # ---- ① 感知：等待 + 意识到要回 --------------------------------
         await self._set_state(TurnState.PERCEIVING)
-        d_avail = d.timing.availability(ctx.presence, rng)
+        d_avail = d.timing.availability(
+            ctx.presence, rng,
+            busy_reply=str((rt.life.schedule or {}).get("busy_reply") or "normal"),
+        )
         d_perceive = d.timing.perceive(ctx, rng, speed)
         await clock.sleep(d_avail + d_perceive)
 

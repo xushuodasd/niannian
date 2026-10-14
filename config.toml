@@ -65,8 +65,13 @@ think_max = 5.5
 typing_cps = 7.0       # 打字速度（字/秒）——真人中文手速≈4~8，太快会显得不像人
 seg_gap_min = 0.4      # 分条间隔
 seg_gap_max = 1.4
-d_avail_busy_min = 20     # BUSY 可及性延迟下界
+d_avail_busy_min = 20     # BUSY 可及性延迟下界（normal 档）
 d_avail_busy_max = 150    # 上限 150s：忙归忙，不至于晾人五分钟
+# 个人"忙时回信"档位（schedule.busy_reply，AI 排作息时按职业定档）：
+d_avail_quick_min = 2     # quick：运营/客服/自由职业——忙也基本秒回
+d_avail_quick_max = 12
+d_avail_slow_min = 240    # slow：医生/授课/开车等深度工作——忙起来真顾不上
+d_avail_slow_max = 1800
 
 # ---- M7 不完美行为概率 --------------------------------------------------
 [imperfection]

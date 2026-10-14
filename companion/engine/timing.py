@@ -18,10 +18,21 @@ class TimingModel:
         self._cfg = cfg
 
     # ---- ① 可及性延迟 --------------------------------------------------
-    def availability(self, presence: PresenceState, rng: random.Random) -> float:
-        """慢层闸门：忙/离开造成的大延迟。休息/离线不在此计算（由唤醒/积压处理）。"""
+    def availability(
+        self, presence: PresenceState, rng: random.Random, busy_reply: str = "normal"
+    ) -> float:
+        """慢层闸门：忙/离开造成的大延迟。休息/离线不在此计算（由唤醒/积压处理）。
+
+        ``busy_reply`` 是个人"忙时回信"档位（``schedule.busy_reply``）：
+        quick=职业允许随时看手机，忙也基本秒回；slow=深度工作，忙起来真顾不上；
+        normal=一般上班族。这让"忙"不再是千人一面的 20~150s。
+        """
         c = self._cfg
         if presence == PresenceState.BUSY:
+            if busy_reply == "quick":
+                return rng.uniform(c.d_avail_quick_min, c.d_avail_quick_max)
+            if busy_reply == "slow":
+                return rng.uniform(c.d_avail_slow_min, c.d_avail_slow_max)
             return rng.uniform(c.d_avail_busy_min, c.d_avail_busy_max)
         if presence == PresenceState.AFK:
             return rng.uniform(c.d_avail_afk_min, c.d_avail_afk_max)
@@ -75,7 +86,10 @@ class TimingModel:
     ) -> TimingBreakdown:
         out_len = sum(len(s.text) for s in segments)
         return TimingBreakdown(
-            d_avail=self.availability(ctx.presence, rng) if include_availability else 0.0,
+            d_avail=self.availability(
+                ctx.presence, rng,
+                busy_reply=str(((ctx.life.schedule or {}).get("busy_reply")) or "normal"),
+            ) if include_availability else 0.0,
             d_perceive=self.perceive(ctx, rng, speed),
             d_think=self.think(ctx, out_len, rng, speed),
             d_type=sum(s.typing_seconds for s in segments),

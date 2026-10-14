@@ -70,7 +70,14 @@ class TimingConfig(BaseModel):
     seg_gap_min: float = 0.4
     seg_gap_max: float = 1.4
     d_avail_busy_min: float = 20.0
-    d_avail_busy_max: float = 300.0
+    d_avail_busy_max: float = 150.0
+    # 个人"忙时回信"档位（schedule.busy_reply）对应的可及性延迟区间：
+    #   quick = 工作性质允许随时看手机（运营/客服/自由职业）——忙也基本秒回
+    #   slow  = 深度工作不能分心（医生/授课/开刀/开车）——忙起来真顾不上
+    d_avail_quick_min: float = 2.0
+    d_avail_quick_max: float = 12.0
+    d_avail_slow_min: float = 240.0
+    d_avail_slow_max: float = 1800.0
     d_avail_afk_min: float = 300.0
     d_avail_afk_max: float = 2400.0
 
