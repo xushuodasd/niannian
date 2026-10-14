@@ -1,0 +1,237 @@
+/* ============================================================
+   共用样式（三页唯一的视觉模板）
+   ------------------------------------------------------------
+   夜话 / 心象 / 孕育 三页共用同一套设计令牌、外壳骨架与通用控件，
+   所有视觉细节（颜色 / 字号 / 圆角 / 间距 / 悬停 / 抽屉）都只在这里定义一次，
+   页面各自的 <style> 只保留"内容区"专属的样式，避免各写各的而漂移。
+
+   版式：左竖栏（顶部品牌 + 中部列表 + 底部导航） + 右侧主内容区。
+   ============================================================ */
+:root {
+  --bg: #faf9f7;          /* 暖白纸底 */
+  --surface: #ffffff;
+  --surface-2: #f1ede7;   /* 你的消息 / 悬停 */
+  --surface-3: #f4f1ec;   /* 左栏底 / 角标 / 操作条 */
+  --line: #eae5dd;
+  --line-2: #ded7cc;
+  --text: #2f2b26;        /* 墨字 */
+  --text-2: #6d655b;
+  --text-3: #a09689;
+  --accent: #c0783f;      /* 暖橙：台灯的颜色 */
+  --accent-soft: #f2e6d9;
+  --ok: #4a7d55;
+  --warn: #9a6f26;
+  --bad: #c0564a;
+  --slate: #7b8494;
+  --sleep: #7b8494;
+  --off: #b6afa5;
+  --rail-w: 292px;
+  --sans: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+}
+/* 想换成深色：把上面 :root 里的颜色替换成这一套（并把 <meta name="color-scheme"> 改回 light dark）
+   --bg:#1a1918; --surface:#232220; --surface-2:#2e2c29; --surface-3:#2a2826;
+   --line:#302e2b; --line-2:#3d3a36; --text:#edeae4; --text-2:#a8a196; --text-3:#7c756b;
+   --accent:#d08a58; --accent-soft:#37302a; --ok:#7fa886; --warn:#cfa055;
+   --sleep:#8b93a0; --off:#6b655e; */
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.7 var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+::selection { background: var(--accent-soft); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* ============ 外壳：左竖栏 + 右主区 ============ */
+.shell { width: 100%; height: 100dvh; display: flex; }
+
+/* ---- 左竖栏 ---- */
+.rail {
+  width: var(--rail-w); flex: none; height: 100%;
+  display: flex; flex-direction: column;
+  background: var(--surface-3);
+  border-right: 1px solid var(--line);
+}
+.rail-head { display: flex; align-items: center; gap: 8px; padding: 15px 16px 11px; }
+.rail-body {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 4px 9px 12px;
+  scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+}
+.rail-body::-webkit-scrollbar { width: 9px; }
+.rail-body::-webkit-scrollbar-thumb {
+  background: var(--line-2); border-radius: 8px; border: 3px solid var(--surface-3);
+}
+.rail-foot { padding: 9px 12px 12px; border-top: 1px solid var(--line); }
+
+/* 品牌：名字 + 一枚暖橙点 */
+.brand { font-size: 15.5px; font-weight: 600; letter-spacing: .02em; display: flex; align-items: center; }
+.bdot { width: 6px; height: 6px; margin-left: 7px; border-radius: 50%; background: var(--accent); opacity: .85; }
+.rail-head .linkbtn { margin-left: auto; }
+
+/* ---- 右主区 ---- */
+.main { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; }
+.pagehead {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; row-gap: 8px;
+  padding: 13px 24px; border-bottom: 1px solid var(--line); background: var(--bg);
+}
+.pagebody { flex: 1; min-height: 0; overflow-y: auto; }
+.grow { margin-left: auto; }
+.ptitle { font-size: 15.5px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+.ptitle .psub { font-size: 12.5px; font-weight: 400; color: var(--text-3); }
+
+/* ---- 底部导航（固定在左下角，三页同一形态）---- */
+.pages { display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line-2); border-radius: 10px; }
+.pages a {
+  flex: 1; font: inherit; font-size: 12.5px; color: var(--text-2); text-decoration: none;
+  padding: 5px 8px; border-radius: 7px; text-align: center;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  transition: background-color .15s ease, color .15s ease;
+}
+.pages a:hover { background: var(--surface-2); color: var(--text); }
+.pages a.on { background: var(--accent-soft); color: var(--accent); }
+.pages a .ni {
+  width: 13px; height: 13px; flex: none; opacity: .75;
+  fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round;
+}
+.pages a.on .ni, .pages a:hover .ni { opacity: 1; }
+
+/* ============ 通用控件 ============ */
+button, select, input, textarea {
+  font: inherit; font-size: 13px; color: var(--text-2); background: transparent;
+  border: 1px solid var(--line-2); border-radius: 9px; padding: 6px 10px; cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+input, textarea { cursor: text; color: var(--text); background: var(--surface); width: 100%; }
+select {
+  appearance: none; padding-right: 26px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M1 1l3.5 3.5L8 1' fill='none' stroke='%23a09689' stroke-width='1.3' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 9px center;
+}
+textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
+input[type=range] { padding: 0; border: 0; background: transparent; }
+a.link, .linkbtn {
+  font: inherit; font-size: 13px; color: var(--text-2); text-decoration: none; cursor: pointer;
+  background: transparent; border: 1px solid transparent; border-radius: 9px; padding: 6px 10px;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+button:hover, select:hover, input:hover, textarea:hover, a.link:hover, .linkbtn:hover {
+  background: var(--surface-2); color: var(--text);
+}
+button.primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+button.primary:hover { background: #ad6a36; color: #fff; }
+button.ghost { border-color: transparent; }
+button.danger { color: var(--bad); border-color: var(--line-2); }
+button.danger:hover { background: #fbeeec; color: var(--bad); }
+
+/* ---- 抽屉按钮 / 遮罩 ---- */
+.drawer-btn {
+  display: none; flex: none; width: 34px; height: 34px; padding: 0;
+  border: 1px solid var(--line-2); border-radius: 9px; background: transparent;
+  color: var(--text-2); font-size: 16px; line-height: 1; place-items: center;
+}
+.drawer-btn:hover { background: var(--surface-3); color: var(--text); }
+.scrim { display: none; }
+
+/* ============ 通用原子（各页同样的长相）============ */
+.tag { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--text-3); }
+.tag.blank { color: var(--slate); }
+.tag.custom { color: var(--accent); }
+.tag.random { color: var(--ok); }
+
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+.dot.busy { background: var(--warn); }
+.dot.sleep { background: var(--sleep); }
+.dot.off { background: var(--off); }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px;
+  box-shadow: 0 10px 30px -26px rgba(90, 60, 30, .55);
+}
+.card h2 { font-size: 14px; font-weight: 600; margin: 0 0 13px; color: var(--text); display: flex; align-items: baseline; gap: 8px; }
+.card h2 .h2sub { font-size: 11.5px; font-weight: 400; color: var(--text-3); letter-spacing: .03em; }
+.card h3 { font-size: 13px; font-weight: 600; margin: 0 0 11px; color: var(--text-3); letter-spacing: .04em; }
+
+.kv { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; }
+.kv .k { color: var(--text-3); flex: none; }
+.kv .v { text-align: right; font-variant-numeric: tabular-nums; }
+
+.bar { height: 5px; background: var(--surface-2); border-radius: 999px; overflow: hidden; margin: 4px 0 9px; }
+.bar > i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width .25s; }
+.bar.ok > i { background: var(--ok); }
+.bar.warn > i { background: var(--warn); }
+.bar.bad > i { background: var(--bad); }
+.bar.slate > i { background: var(--slate); }
+.bar.purple > i { background: var(--slate); }
+
+.rowline { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.rowline .lbl { width: 74px; color: var(--text-3); flex: none; }
+.rowline .bar { flex: 1; margin: 0; }
+.rowline .num { width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-3); }
+
+.chip { display: inline-block; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin: 0 4px 4px 0; }
+.chip.lock { color: var(--warn); background: var(--surface-2); }
+
+.empty { color: var(--text-3); font-size: 13px; }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--text-3); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; }
+.belief { border-top: 1px solid var(--line); padding: 9px 0 4px; }
+.belief:first-child { border-top: 0; }
+
+/* ---- 生命体 / 会话 列表项（夜话 · 心象 · 孕育 三页共用同一套皮肤）---- */
+/* 各页只往里填自己的内容：夜话填"最近消息预览"，心象填在线状态，孕育再添类型标签与认知度 */
+.lifelist { display: flex; flex-direction: column; }
+.lifeitem {
+  position: relative;
+  display: grid; grid-template-columns: 40px minmax(0, 1fr);
+  column-gap: 11px; align-items: center;
+  padding: 10px 11px; margin-bottom: 3px;
+  border: 1px solid transparent; border-radius: 13px; cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, box-shadow .2s ease;
+}
+.lifeitem:last-child { margin-bottom: 0; }
+.lifeitem:hover { background: rgba(192, 120, 63, .07); }
+/* 选中态：台灯光晕 —— 暖光自左侧漫开，配一条灯丝似的竖条 */
+.lifeitem.on {
+  background: linear-gradient(90deg, rgba(242, 230, 217, .98), rgba(240, 214, 185, .5));
+  border-color: rgba(192, 120, 63, .28);
+  box-shadow: 0 0 0 3px rgba(192, 120, 63, .06), 0 8px 24px -18px rgba(150, 90, 40, .7);
+}
+.lifeitem.on::after {
+  content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px;
+  border-radius: 3px; background: var(--accent); opacity: .8;
+}
+.lifeitem .av {
+  width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface); color: var(--accent); font-weight: 600; font-size: 15px;
+  border: 1px solid var(--line-2);
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease;
+}
+.lifeitem.on .av { background: var(--accent); color: #fff; border-color: var(--accent); }
+.lifeitem.blank .av { background: var(--surface-3); color: var(--text-3); }
+.lifeitem .nm { font-weight: 600; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.lifeitem .nm .nmtxt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lifeitem .meta { font-size: 12px; color: var(--text-3); display: flex; gap: 6px; align-items: center; }
+
+/* ============ 窄屏：左栏收成抽屉 ============ */
+@media (max-width: 760px) {
+  .rail {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 70; width: 284px;
+    transform: translateX(-103%);
+    transition: transform .26s cubic-bezier(.2, .7, .3, 1);
+    box-shadow: 0 0 46px -8px rgba(0, 0, 0, .4);
+  }
+  .rail.open { transform: none; }
+  .scrim { display: none; position: fixed; inset: 0; z-index: 65; background: rgba(30, 26, 22, .38); }
+  .scrim.show { display: block; }
+  .drawer-btn { display: grid; }
+  .pagehead { padding: 11px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+  }
+}

@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>陪伴</title>
+<!-- 外壳（左竖栏 / 底部导航 / 抽屉）、设计令牌、通用控件都在 /common.css -->
+<link rel="stylesheet" href="/common.css" />
+<style>
+  /* ============================================================
+     夜话页专属样式。
+     ------------------------------------------------------------
+     左竖栏、底部导航、抽屉、按钮/输入/卡片等通用件全部来自 /common.css，
+     这里只留"聊天窗口"这一页自己的内容样式：
+       顶栏人物与状态角标 · 左栏会话项 · 对话流 · 底部输入 · 模型设置弹层。
+     ============================================================ */
+
+  /* ---- 顶栏：人物与状态角标 ---- */
+  .avatar {
+    width: 36px; height: 36px; flex: none; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 15px; font-weight: 600;
+  }
+  .who { display: flex; flex-direction: column; line-height: 1.35; min-width: 0; }
+  .who .name { font-size: 15.5px; font-weight: 600; }
+  .who .sub { font-size: 12.5px; color: var(--text-3); display: flex; align-items: center; gap: 6px; }
+  .who .sub .sep { color: var(--text-3); opacity: .6; }
+  #clock { font-variant-numeric: tabular-nums; }
+  .spacer { margin-left: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .badge {
+    font-size: 12px; padding: 3px 9px; border-radius: 999px; white-space: nowrap;
+    background: var(--surface-3); color: var(--text-3);
+  }
+  #stateBadge[data-state="perceiving"],
+  #stateBadge[data-state="thinking"],
+  #stateBadge[data-state="speaking"] { color: var(--accent); background: var(--accent-soft); }
+  #llmBadge.mock { color: var(--warn); }
+  #llmBadge.real { color: var(--ok); }
+
+  /* ---- 左栏：会话项（复用 /common.css 的 .lifeitem 皮肤，只多一行"最近消息"预览）---- */
+  .lifeitem .nm .end { margin-left: auto; display: flex; align-items: center; gap: 6px; flex: none; }
+  .lifeitem .nm .end .tm { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .lifeitem .prev {
+    margin-top: 2px; font-size: 12px; color: var(--text-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .lifeitem.on .prev { color: var(--text-2); }
+
+  /* ---- 唤醒进度：一条很细的线 ---- */
+  #wakewrap { height: 2px; margin: 0 24px; display: none; background: var(--surface-3); }
+  #wakewrap.show { display: block; }
+  #wakebar { height: 100%; width: 0; background: var(--accent); opacity: .55; transition: width .4s ease; }
+
+  /* ---- 对话流 ---- */
+  #log {
+    flex: 1; overflow-y: auto; padding: 26px 24px 12px;
+    display: flex; flex-direction: column; gap: 22px;
+    scrollbar-width: thin; scrollbar-color: var(--line-2) transparent;
+  }
+  #log::-webkit-scrollbar { width: 10px; }
+  #log::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; border: 3px solid var(--bg); }
+
+  /* 一条消息 = 左边一枚圆头像 + 右边全宽文本；你说的话则整块靠右 */
+  .row {
+    display: grid; grid-template-columns: 30px minmax(0, 1fr);
+    column-gap: 12px; row-gap: 5px;
+    animation: fade .26s ease both;
+  }
+  @keyframes fade { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+  .mini {
+    grid-column: 1; grid-row: 1;
+    width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 13px; font-weight: 600;
+  }
+  /* 她的话：不加框、不换底色，整段铺开，读起来就是"在说话" */
+  .bubble {
+    grid-column: 2; grid-row: 1;
+    min-width: 0; font-size: 15.5px; line-height: 1.85;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .meta { grid-column: 2; grid-row: 2; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+  /* 你说的话：右侧一块浅色圆角 */
+  .row.me { grid-template-columns: minmax(0, 1fr); }
+  .row.me .bubble {
+    grid-column: 1; justify-self: end; max-width: 78%;
+    padding: 10px 15px; border-radius: 18px;
+    background: var(--surface-2); font-size: 15px; line-height: 1.75;
+  }
+  .row.me .meta { grid-column: 1; justify-self: end; }
+
+  /* 旁白（出戏的话）：斜体加一条竖线，与对话区分开 */
+  .row.ooc .bubble {
+    font-style: italic; color: var(--text-2);
+    padding-left: 12px; border-left: 2px solid var(--line-2);
+  }
+  /* 正在写字：句尾一根细细的光标 */
+  .bubble.streaming::after {
+    content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 3px;
+    vertical-align: -2px; background: var(--accent);
+    animation: caret 1s steps(2, jump-none) infinite;
+  }
+  @keyframes caret { 0%, 49% { opacity: .9; } 50%, 100% { opacity: .1; } }
+
+  .sys { align-self: center; font-size: 12.5px; color: var(--text-3); text-align: center; }
+
+  /* 还没聊过 */
+  .quiet { margin: auto; text-align: center; color: var(--text-3); animation: fade .4s ease both; }
+  .quiet .big { font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .quiet .small { font-size: 13.5px; }
+
+  /* 她在敲字 */
+  #typing { display: none; align-items: center; gap: 5px; padding: 0 24px 12px; color: var(--text-3); font-size: 12.5px; }
+  #typing.show { display: flex; }
+  .tp { width: 5px; height: 5px; border-radius: 50%; background: var(--text-3); animation: blink 1.3s ease-in-out infinite; }
+  .tp:nth-child(2) { animation-delay: .18s; }
+  .tp:nth-child(3) { animation-delay: .36s; }
+  .tp-label { margin-left: 3px; }
+  @keyframes blink { 0%, 100% { opacity: .25; } 40% { opacity: 1; } }
+
+  /* ---- 底部输入：一个圆角框，里面就是全部 ---- */
+  footer { padding: 10px 24px 22px; }
+  .composer {
+    display: flex; align-items: flex-end; gap: 4px;
+    padding: 8px 8px 8px 16px;
+    background: var(--surface);
+    border: 1px solid var(--line-2); border-radius: 22px;
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+  .composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  #input {
+    flex: 1; min-width: 0; resize: none; min-height: 0; max-height: 140px;
+    padding: 7px 0; border: 0; outline: none; background: transparent;
+    color: var(--text); font: inherit; line-height: 1.7;
+  }
+  #input::placeholder { color: var(--text-3); }
+  #send {
+    flex: none; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 50%;
+    background: var(--accent); color: #fff; font-size: 13px;
+    transition: opacity .15s ease, transform .15s ease;
+  }
+  #send:hover { background: var(--accent); color: #fff; opacity: .88; transform: scale(1.05); }
+  #stop {
+    flex: none; padding: 8px 8px; border: 0; border-radius: 10px;
+    background: transparent; color: var(--text-3); font-size: 13px;
+    transition: color .15s ease, background-color .15s ease;
+  }
+  #stop:hover { color: var(--text-2); background: var(--surface-3); }
+
+  /* ---- 模型设置弹层 ---- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 80; padding: 16px;
+    background: rgba(30, 26, 22, .3);
+    display: none; place-items: center;
+  }
+  .overlay.show { display: grid; }
+  .sheet {
+    width: 100%; max-width: 520px; max-height: 86dvh; overflow-y: auto;
+    padding: 22px; border-radius: 18px;
+    background: var(--surface); border: 1px solid var(--line);
+    box-shadow: 0 24px 60px -28px rgba(0, 0, 0, .35);
+  }
+  .sheet h3 { margin: 0 0 5px; font-size: 16px; }
+  .sheet p.hint { margin: 0 0 16px; font-size: 12.5px; color: var(--text-3); line-height: 1.7; }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 13px; }
+  .field label { font-size: 12.5px; color: var(--text-2); }
+  .field input, .field select {
+    width: 100%; padding: 9px 11px; font: inherit; font-size: 13.5px;
+    color: var(--text); background: var(--bg);
+    border: 1px solid var(--line-2); border-radius: 10px; outline: none;
+    transition: border-color .18s ease, box-shadow .18s ease;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .field input.custom { margin-top: 6px; }
+  .row2 { display: flex; gap: 12px; }
+  .row2 .field { flex: 1; min-width: 0; }
+  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .presets button {
+    padding: 5px 13px; font-size: 12.5px; border-radius: 999px;
+    color: var(--text-2); background: transparent; border: 1px solid var(--line-2);
+  }
+  .presets button:hover { background: var(--surface-3); color: var(--text); }
+  .actions { display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+  .actions button {
+    padding: 9px 15px; font-size: 13.5px; border-radius: 10px;
+    color: var(--text-2); background: transparent; border: 1px solid var(--line-2);
+  }
+  .actions button:hover { background: var(--surface-3); color: var(--text); }
+  #llmSave { color: #fff; background: var(--accent); border-color: var(--accent); }
+  #llmSave:hover { background: var(--accent); color: #fff; opacity: .9; }
+  .result { font-size: 12.5px; margin-top: 12px; white-space: pre-wrap; line-height: 1.7; }
+  .result.ok { color: var(--ok); }
+  .result.bad { color: var(--bad); }
+
+  /* ---- 窄屏：只调本页内容区的留白（抽屉/外壳由 /common.css 处理）---- */
+  @media (max-width: 760px) {
+    #log { padding: 20px 14px 8px; gap: 18px; }
+    footer { padding: 8px 14px 16px; }
+    #typing { padding: 0 16px 10px; }
+    #wakewrap { margin: 0 14px; }
+    .row.me .bubble { max-width: 88%; }
+    #llmBadge { display: none; }
+  }
+</style>
+</head>
+<body>
+<!-- 右主区：聊天窗口（结构由 shell 生成，这里填入本页内容） -->
+<template id="mainTpl">
+  <header class="pagehead">
+    <button class="drawer-btn" id="drawerBtn" title="联系人">☰</button>
+    <div class="avatar" id="avatar">她</div>
+    <div class="who">
+      <div class="name" id="name">伙伴</div>
+      <div class="sub">
+        <span class="dot" id="dot"></span>
+        <span id="presence">在线</span>
+        <span class="sep">·</span>
+        <span id="clock">--:--</span>
+      </div>
+    </div>
+    <div class="spacer">
+      <div class="badge" id="stateBadge" data-state="idle">空闲</div>
+      <div class="badge" id="llmBadge">模型</div>
+    </div>
+  </header>
+  <div id="wakewrap"><div id="wakebar"></div></div>
+
+  <div id="log"></div>
+  <div id="typing"><span class="tp"></span><span class="tp"></span><span class="tp"></span><span class="tp-label">正在输入…</span></div>
+
+  <footer>
+    <div class="composer">
+      <textarea id="input" rows="1" placeholder="说点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+      <button id="stop" title="打断她正在说的话">停止</button>
+      <button id="send" title="发送">发送</button>
+    </div>
+  </footer>
+</template>
+
+<div class="overlay" id="llmOverlay">
+  <div class="sheet">
+    <h3>模型设置</h3>
+    <p class="hint">改完点「保存并测试」立即生效，无需重启；配置保存在本机 data/settings.json（API Key 不会回显明文）。</p>
+    <div class="presets" id="llmPresets"></div>
+
+    <div class="field">
+      <label>Base URL（OpenAI 兼容端点，需带 /v1）</label>
+      <input id="fBase" placeholder="https://api.deepseek.com/v1" />
+    </div>
+    <div class="field">
+      <label>API Key <span id="keyState"></span></label>
+      <input id="fKey" type="password" placeholder="留空 = 保持不变" autocomplete="off" />
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label>对话模型（强）</label>
+        <select id="fChatSel"></select>
+        <input id="fChat" class="custom" placeholder="输入自定义模型名" style="display:none" />
+      </div>
+      <div class="field">
+        <label>心理模型（轻）</label>
+        <select id="fMindSel"></select>
+        <input id="fMind" class="custom" placeholder="输入自定义模型名" style="display:none" />
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="field"><label>temperature</label><input id="fTemp" type="number" step="0.05" min="0" max="2" /></div>
+      <div class="field"><label>max_tokens</label><input id="fMax" type="number" min="16" step="64" /></div>
+    </div>
+
+    <div class="field" style="border-top:1px solid var(--line); padding-top:15px; margin-top:8px">
+      <label>聊天记录</label>
+      <p class="hint" style="margin:0 0 10px">「清空」只是让你不再看到这些回放；她的记忆不会被删除——她永远记得你们聊过的一切。</p>
+      <button id="clearHist">清空聊天记录（仅你可见的部分）</button>
+    </div>
+
+    <div class="actions">
+      <button id="llmSave">保存并测试</button>
+      <button id="llmClear">清空 Key（回到模拟大脑）</button>
+      <button id="llmClose">关闭</button>
+    </div>
+    <div class="result" id="llmResult"></div>
+  </div>
+</div>
+
+<script src="/shell.js"></script>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  // 统一外壳：左竖栏 + 底部导航 + 抽屉，结构/样式来自 /common.css 与 /shell.js
+  const refs = Shell.mount({
+    active: "nighttalk",
+    brand: "陪伴",
+    brandExtra: '<button class="linkbtn" id="settingsBtn">设置</button>',
+    mainTpl: "mainTpl",
+  });
+  const closeDrawer = refs.closeDrawer;
+
+  const log = $("log"), input = $("input"), sendBtn = $("send"), stopBtn = $("stop");
+  const typing = $("typing"), badge = $("stateBadge"), dot = $("dot"), presence = $("presence");
+  const nameEl = $("name"), avatar = $("avatar");
+  const wakeWrap = $("wakewrap"), wakeBar = $("wakebar"), clockEl = $("clock");
+  const convoList = refs.railBody;   // 左栏中部列表由外壳承担
+  // 上次在聊的生命体：刷新 / 从调试、控制台跳回来时保持同一个人，历史才连续（像微信）
+  const LS_LIFE = "companion.lastLife";
+
+  // 会话状态 → 角标文案（对应 engine/types.py 的 TurnState）
+  const STATE_TEXT = {
+    idle: "空闲", perceiving: "正在看…", thinking: "正在想…",
+    speaking: "正在说…", stopping: "停一下",
+  };
+  const PRESENCE_TEXT = {
+    active: "在线", busy: "忙碌", afk: "暂时离开", dnd: "勿扰",
+    resting: "小睡中", asleep: "睡觉中", offline: "离线",
+  };
+  const DOT_CLASS = { active: "", busy: "busy", afk: "busy", dnd: "busy",
+                      resting: "sleep", asleep: "sleep", offline: "off" };
+
+  let ws = null;
+  let typingTimer = null;     // 打字机动画句柄
+  let currentBubble = null;   // 当前正在逐字显示的助手气泡
+  let lastUserMeta = null;    // 最近一条自己消息的 meta（用于"已读"回执）
+  let historyReady = false;   // 本轮连接的历史是否已铺好（未铺好前，落屏事件先攒着）
+  let pending = [];           // 待历史铺好后补渲染的事件（避免被 loadHistory 清屏抹掉）
+  // 会被"清屏"影响的落屏事件；其余（state/presence/lives…）即时处理
+  const QUEUE_UNTIL_HISTORY = new Set(["chunk", "message", "notice", "error"]);
+
+  // 当前对话的生命体 + 左栏数据（会话列表 / 每位最近一条消息预览）
+  let activeLife = "";
+  let livesCache = [];
+  const previews = new Map();   // life_id -> { text, at, role }
+  const convoNode = new Map();  // life_id -> { pv, zone, dot } 列表项里的节点引用
+
+  const nowIso = () => new Date().toISOString();
+  const lifeById = (id) => livesCache.find((l) => l.life_id === id);
+
+  function tickClock() {
+    const d = new Date();
+    clockEl.textContent = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+  tickClock();
+  setInterval(tickClock, 20000);
+
+  // ---- 渲染 -----------------------------------------------------------
+  // 时间戳：xx年xx月xx日 几点几分 —— 每条消息都带上，看得见"啥时候聊的"
+  function stamp(d) {
+    d = d ? new Date(d) : new Date();
+    if (isNaN(d.getTime())) return "";
+    const p = (x) => String(x).padStart(2, "0");
+    return `${d.getFullYear()}年${p(d.getMonth() + 1)}月${p(d.getDate())}日 ${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+  // 左栏列表里的时间：今天只显示时分，本年内显示月日，更早带年份
+  function shortTime(at) {
+    const d = at ? new Date(at) : new Date();
+    if (isNaN(d.getTime())) return "";
+    const n = new Date();
+    const p = (x) => String(x).padStart(2, "0");
+    if (d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate())
+      return `${p(d.getHours())}:${p(d.getMinutes())}`;
+    if (d.getFullYear() === n.getFullYear()) return `${d.getMonth() + 1}月${d.getDate()}日`;
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  // 空对话时的提示：有人开口就撤掉
+  function clearQuiet() { const q = $("quiet"); if (q) q.remove(); }
+  function addQuiet() {
+    clearQuiet();
+    const el = document.createElement("div");
+    el.className = "quiet";
+    el.id = "quiet";
+    el.innerHTML = '<div class="big">还没有聊过</div>' +
+                   '<div class="small">说点什么，开始你们的对话</div>';
+    log.appendChild(el);
+  }
+  // 消息头像上的字：跟随当前生命体（avatar 字段，没配就用名字首字）
+  function initial() {
+    const ch = (avatar.textContent || "").trim();
+    if (ch && ch !== "她") return ch;
+    const nm = (nameEl.textContent || "").trim();
+    return (nm && nm !== "伙伴") ? nm.slice(0, 1) : "她";
+  }
+  function addBubble(role, text, ooc, at) {
+    clearQuiet();
+    const row = document.createElement("div");
+    row.className = "row " + (role === "user" ? "me" : "her") + (ooc ? " ooc" : "");
+    // 她的话前面缀一枚小圆头像；旁白和你说的话不带
+    if (role !== "user" && !ooc) {
+      const a = document.createElement("div");
+      a.className = "mini";
+      a.textContent = initial();
+      row.appendChild(a);
+    }
+    const b = document.createElement("div");
+    b.className = "bubble";
+    b.textContent = text;
+    row.appendChild(b);
+    if (at) {
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = at;
+      row.appendChild(m);
+    }
+    log.appendChild(row);
+    log.scrollTop = log.scrollHeight;
+    return b;
+  }
+  function addSystem(text) {
+    const el = document.createElement("div");
+    el.className = "sys";
+    el.textContent = text;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+  // 打字机：按后端给的 type_ms（这条气泡预计打多久）逐字打出，模拟真人手速
+  function typewrite(text, ooc, typeMs) {
+    finishTyping();
+    const b = addBubble("her", "", ooc);
+    b.classList.add("streaming");
+    currentBubble = b;
+    const n = text.length;
+    // 每字耗时 = 预期总时长 / 字数，夹在 [50, 240]ms：既不会"唰"地出完，也不会慢到反常
+    const perChar = Math.min(240, Math.max(50, (typeMs || n * 150) / Math.max(1, n)));
+    let i = 0;
+    typingTimer = setInterval(() => {
+      i += Math.random() < 0.06 ? 2 : 1;   // 偶尔连打两字，像真人手速的抖动
+      if (i > n) i = n;
+      b.textContent = text.slice(0, i);
+      setPreview(activeLife, text.slice(0, i), nowIso(), "her");  // 左栏预览随打字实时跟进
+      log.scrollTop = log.scrollHeight;
+      if (i >= n) finishTyping();
+    }, perChar);
+  }
+  function finishTyping() {
+    if (typingTimer) { clearInterval(typingTimer); typingTimer = null; }
+    if (currentBubble) {
+      const txt = currentBubble.textContent || "";
+      currentBubble.classList.remove("streaming");
+      const m = document.createElement("div");
+      m.className = "meta";
+      m.textContent = stamp();
+      currentBubble.parentElement.appendChild(m);
+      currentBubble = null;
+      if (txt) setPreview(activeLife, txt, nowIso(), "her");
+    }
+  }
+  function setTyping(on) { typing.classList.toggle("show", !!on); }
+  function setState(state) {
+    if (state === "idle") finishTyping();   // 收尾兜底：把还没打完的字立即补全，别让她"话说一半"
+    badge.textContent = STATE_TEXT[state] || state;
+    badge.dataset.state = state;
+    if (!["resting", "asleep", "offline"].includes(currentPresence)) {
+      dot.className = "dot" + (state === "idle" ? "" : " busy");
+    }
+  }
+  let currentPresence = "active";
+  function setPresence(p, meta) {
+    currentPresence = p;
+    presence.textContent = (PRESENCE_TEXT[p] || p) + (meta && meta.note ? " · " + meta.note : "");
+    dot.className = "dot" + (DOT_CLASS[p] || "");
+    // 左栏里当前生命的在线点同步
+    const n = convoNode.get(activeLife);
+    if (n) n.dot.className = "dot " + (DOT_CLASS[p] || "");
+    const resting = (p === "resting" || p === "asleep");
+    if (!resting) { wakeWrap.classList.remove("show"); wakeBar.style.width = "0"; }
+  }
+  function setWake(progress) {
+    wakeWrap.classList.add("show");
+    wakeBar.style.width = Math.min(100, Math.round(progress * 100)) + "%";
+  }
+  function markDelivered(count) {
+    if (!lastUserMeta) return;
+    lastUserMeta.textContent = "已读";
+  }
+
+  // ---- 左栏：会话列表 -----------------------------------------------
+  // 更新某位生命的"最近一条消息"预览（同时刷新列表项上的文字与时间）
+  function setPreview(lifeId, text, at, role) {
+    if (!lifeId || !text) return;
+    const cur = previews.get(lifeId) || {};
+    const rec = { text: text, at: at || cur.at || nowIso(), role: role || cur.role || "her" };
+    previews.set(lifeId, rec);
+    const n = convoNode.get(lifeId);
+    if (n) {
+      n.pv.textContent = (rec.role === "user" ? "你：" : "") + rec.text;
+      n.zone.textContent = shortTime(rec.at);
+    }
+  }
+  function applyActiveHeader() {
+    const l = lifeById(activeLife);
+    if (!l) return;
+    nameEl.textContent = l.name || "伙伴";
+    avatar.textContent = l.avatar || (l.name || "").slice(-1) || "她";
+  }
+  // 整表重绘：生命体列表 + 预览 + 选中态（不涉及消息流，开销很小，可放心重绘）。
+  // 列表项复用 /common.css 的 .lifeitem 皮肤，只多一行"最近消息"预览（比心象/孕育多这一行）。
+  function mk(tag, cls, text) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    return el;
+  }
+  function renderConvos() {
+    convoList.innerHTML = "";
+    convoNode.clear();
+    livesCache.forEach((l) => {
+      const el = mk("div", "lifeitem" + (l.life_id === activeLife ? " on" : ""));
+      el.dataset.life = l.life_id;
+      el.setAttribute("role", "button");
+      el.tabIndex = 0;
+
+      // 第一行：名字 + 右侧在线点与时间
+      const l1 = mk("div", "nm");
+      l1.appendChild(mk("span", "nmtxt", l.name || l.life_id));
+      const end = mk("span", "end");
+      const cdot = mk("span", "dot " + (DOT_CLASS[l.presence] || ""));
+      const zone = mk("span", "tm");
+      end.appendChild(cdot); end.appendChild(zone);
+      l1.appendChild(end);
+
+      // 第二行：最近一条消息预览
+      const pv = mk("div", "prev", "还没有聊过");
+
+      const body = mk("div");
+      body.appendChild(l1); body.appendChild(pv);
+      el.appendChild(mk("div", "av", l.avatar || (l.name || "").slice(-1) || "她"));
+      el.appendChild(body);
+
+      const p = previews.get(l.life_id);
+      if (p) { pv.textContent = (p.role === "user" ? "你：" : "") + p.text; zone.textContent = shortTime(p.at); }
+      convoNode.set(l.life_id, { pv, zone, dot: cdot });
+
+      el.addEventListener("click", () => selectLife(l.life_id));
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectLife(l.life_id); }
+      });
+      convoList.appendChild(el);
+    });
+  }
+  function renderLives(lives) {
+    livesCache = lives || [];
+    if (!activeLife && livesCache.length) {          // 兜底：首帧没定人时，从列表里补一个
+      const remembered = localStorage.getItem(LS_LIFE);
+      activeLife = livesCache.some((l) => l.life_id === remembered) ? remembered : livesCache[0].life_id;
+      localStorage.setItem(LS_LIFE, activeLife);
+      applyActiveHeader();
+    }
+    renderConvos();
+  }
+  // 拉取每位生命体的最近一条消息做预览（复用历史接口，零后端改动）。
+  // 只有"当前连接的生命体"能收到实时事件，其余几位的预览在启动 / 切回 / 重新聚焦时刷新。
+  let previewsLoading = false;   // 上一批还没拉完就跳过：启动/聚焦/可见性变化常挨在一起，避免重复并发拉同一批
+  async function loadPreviews() {
+    if (previewsLoading) return;
+    previewsLoading = true;
+    try {
+      await Promise.all(livesCache.map(async (l) => {
+        try {
+          const r = await fetch("/api/history?life_id=" + encodeURIComponent(l.life_id));
+          const d = await r.json();
+          const msgs = d.messages || [];
+          const last = msgs[msgs.length - 1];
+          if (last) setPreview(l.life_id, last.content, last.at, last.role === "user" ? "user" : "her");
+        } catch { /* 拿不到就空着，不影响聊天 */ }
+      }));
+    } finally {
+      previewsLoading = false;
+    }
+  }
+
+  // 切人：与后端 switch 同源，落到新的 (life_id) 上并重铺该位的聊天记录
+  async function selectLife(lifeId) {
+    closeDrawer();
+    if (!lifeId || lifeId === activeLife) return;
+    activeLife = lifeId;
+    localStorage.setItem(LS_LIFE, lifeId);
+    const l = lifeById(lifeId);
+    if (l) setPresence(l.presence);      // 先给个即时的在线状态，快照马上会校正
+    applyActiveHeader();
+    renderConvos();
+    send({ type: "switch", life_id: lifeId });
+    await loadHistory();
+  }
+
+  // ---- WebSocket ------------------------------------------------------
+  function send(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+
+  // 拉取并渲染历史聊天记录：刷新 / 重连 / 切换生命体后都保持一致，
+  // "她记得什么"看得见，也就不会再有"刚认识就翻旧账"的错觉（记忆本身不清空）
+  async function loadHistory() {
+    const life = activeLife;
+    try {
+      const r = await fetch("/api/history" + (life ? `?life_id=${encodeURIComponent(life)}` : ""));
+      const d = await r.json();
+      finishTyping();
+      log.innerHTML = "";
+      lastUserMeta = null;   // 旧气泡已随清屏移除，回执锚点作废（重建后由新消息重新挂上）
+      const msgs = d.messages || [];
+      msgs.forEach((m) => addBubble(m.role === "user" ? "user" : "her", m.content, false, stamp(m.at)));
+      if (msgs.length) {
+        addSystem("以上是历史记录");
+        const last = msgs[msgs.length - 1];
+        setPreview(life, last.content, last.at, last.role === "user" ? "user" : "her");
+      } else {
+        addQuiet();
+      }
+    } catch { /* 拿不到就空着，不影响聊天 */ }
+  }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    // 把"要跟谁聊"随连接带上，后端一接受就绑到同一个人，不必再靠 switch 兜底
+    const qs = activeLife ? "?life_id=" + encodeURIComponent(activeLife) : "";
+    ws = new WebSocket(`${proto}://${location.host}/ws${qs}`);
+    ws.onopen = async () => {
+      // 先铺好"已落库"的历史，再接住服务端回放的"在途轮次"。
+      // 期间会落屏的事件（chunk/notice…）先攒着 —— 否则会被 loadHistory 的清屏抹掉。
+      historyReady = false;
+      await loadHistory();
+      historyReady = true;
+      const queued = pending; pending = [];
+      queued.forEach(handleEvent);
+    };
+    ws.onclose = () => {
+      // 断线 ≠ 她停了（服务端照样把这一轮说完）。别谎报"空闲"，
+      // 保留原状态；重连后按服务端真实状态 / 历史 / 在途回放对齐。
+      setTyping(false);
+      dot.className = "dot off";
+      presence.textContent = "已断开 · 重连中…";
+      addSystem("连接中断，正在重连…");
+      setTimeout(connect, 3000);
+    };
+    ws.onmessage = (ev) => {
+      let e; try { e = JSON.parse(ev.data); } catch { return; }
+      if (!historyReady && QUEUE_UNTIL_HISTORY.has(e.type)) { pending.push(e); return; }
+      handleEvent(e);
+    };
+  }
+
+  function handleEvent(e) {
+    switch (e.type) {
+      case "state": setState(e.state); break;
+      case "presence": setPresence(e.presence, e.meta); break;
+      case "typing": setTyping(e.typing); break;
+      case "chunk": typewrite(e.text || "", e.meta && e.meta.out_of_character, e.meta && e.meta.type_ms); break;
+      case "message":
+        addBubble(e.role === "user" ? "user" : "her", e.text || "");
+        if (e.text) setPreview(activeLife, e.text, nowIso(), e.role === "user" ? "user" : "her");
+        break;
+      case "wake": setWake((e.meta && e.meta.progress) || 0); break;
+      case "delivered": markDelivered((e.meta && e.meta.count) || 0); break;
+      case "notice": addSystem(e.text || ""); break;
+      case "error": addSystem(e.text || "出错了"); break;
+      case "lives": renderLives(e.lives || []); break;
+    }
+  }
+
+  // ---- 发送 -----------------------------------------------------------
+  function sendMsg() {
+    const text = input.value.trim();
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    const b = addBubble("user", text);        // 本地先乐观显示
+    const m = document.createElement("div");
+    m.className = "meta";
+    m.textContent = stamp();
+    b.parentElement.appendChild(m);
+    lastUserMeta = m;
+    finishTyping();                            // 插话时，把上一段立即显示完整
+    send({ type: "say", content: text, life_id: activeLife || undefined });
+    setPreview(activeLife, text, nowIso(), "user");
+    input.value = "";
+    input.style.height = "auto";
+  }
+  function stopSpeak() {
+    send({ type: "stop" });
+    finishTyping();
+    setTyping(false);
+  }
+
+  sendBtn.addEventListener("click", sendMsg);
+  stopBtn.addEventListener("click", stopSpeak);
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+  });
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 140) + "px";
+  });
+
+  // 抽屉（窄屏唤出左栏）的开合已在 Shell.mount 里统一绑定，这里不再重复。
+  // 重新聚焦 / 回到页面时，顺手刷新一遍左栏预览（其余生命的消息不实时，靠这里追平）
+  window.addEventListener("focus", () => loadPreviews());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadPreviews(); });
+
+  // ---- 模型设置（LLM 运行时配置）------------------------------------
+  const llmBadge = $("llmBadge"), overlay = $("llmOverlay"), llmResult = $("llmResult");
+  const fBase = $("fBase"), fKey = $("fKey"), fChat = $("fChat"), fMind = $("fMind");
+  const fTemp = $("fTemp"), fMax = $("fMax"), llmPresets = $("llmPresets");
+  const keyState = $("keyState");
+  const fChatSel = $("fChatSel"), fMindSel = $("fMindSel"), CUSTOM = "__custom__";
+
+  // 下拉框与「自定义」输入框联动：选中「自定义…」才显示手填框，保留任意 OpenAI 兼容模型的灵活性
+  function syncCustom(sel, input) {
+    const custom = sel.value === CUSTOM;
+    input.style.display = custom ? "block" : "none";
+  }
+
+  // 按服务商分组渲染模型候选（optgroup），避免 DeepSeek 面板里混进 OpenAI/本地模型的扁平大列表
+  function setModel(sel, input, presets, current) {
+    sel.innerHTML = "";
+    const known = new Set();
+    Object.entries(presets || {}).forEach(([key, p]) => {
+      const models = p.models || [];
+      if (!models.length) return;
+      const group = document.createElement("optgroup");
+      group.label = p.label || key;
+      models.forEach((m) => {
+        const o = document.createElement("option");
+        o.value = m;
+        o.textContent = m;
+        group.appendChild(o);
+        known.add(m);
+      });
+      sel.appendChild(group);
+    });
+    // 当前值不在任何预设里（手填过）→ 单独列一组，避免"值丢失/被顶掉"
+    if (current && !known.has(current)) {
+      const group = document.createElement("optgroup");
+      group.label = "当前使用";
+      const o = document.createElement("option");
+      o.value = current;
+      o.textContent = current;
+      group.appendChild(o);
+      sel.appendChild(group);
+      known.add(current);
+    }
+    const c = document.createElement("option");
+    c.value = CUSTOM;
+    c.textContent = "自定义…";
+    sel.appendChild(c);
+    sel.value = current || (known.size ? [...known][0] : CUSTOM);
+    syncCustom(sel, input);
+  }
+
+  const pickModel = (sel, current, models) => {
+    // 预设按钮用：优先选中该预设的模型，没有则落到「自定义…」
+    sel.value = (models || []).includes(current) ? current : CUSTOM;
+  };
+
+  const readModel = (sel, input) => (sel.value === CUSTOM ? input.value.trim() : sel.value);
+
+  fChatSel.addEventListener("change", () => {
+    syncCustom(fChatSel, fChat);
+    if (fChatSel.value === CUSTOM) fChat.focus();
+  });
+  fMindSel.addEventListener("change", () => {
+    syncCustom(fMindSel, fMind);
+    if (fMindSel.value === CUSTOM) fMind.focus();
+  });
+
+  function applyLlmState(s) {
+    llmBadge.textContent = s.mode === "mock" ? "模拟大脑" : (s.chat_model || "真实模型");
+    llmBadge.className = "badge " + (s.mode === "mock" ? "mock" : "real");
+    llmBadge.title = s.mode === "mock"
+      ? "未配置可用 Key，正在用本地模拟大脑"
+      : `真实模型：${s.chat_model}（心理：${s.mind_model}）`;
+
+    fBase.value = s.base_url || "";
+    fTemp.value = s.temperature ?? "";
+    fMax.value = s.max_tokens ?? "";
+    keyState.textContent = s.has_key ? `（已保存 ${s.api_key_masked}）` : "（未配置）";
+
+    // 预设按钮：点一下把该服务商的地址与模型灌进表单
+    llmPresets.innerHTML = "";
+    Object.values(s.presets || {}).forEach((p) => {
+      const btn = document.createElement("button");
+      btn.textContent = p.label;
+      btn.onclick = () => {
+        fBase.value = p.base_url || "";
+        fMax.value = p.max_tokens ?? fMax.value;
+        pickModel(fChatSel, p.chat_model, p.models);
+        pickModel(fMindSel, p.mind_model, p.models);
+        syncCustom(fChatSel, fChat);
+        syncCustom(fMindSel, fMind);
+      };
+      llmPresets.appendChild(btn);
+    });
+
+    // 两个下拉：按服务商分组展示候选，并选中当前生效值
+    setModel(fChatSel, fChat, s.presets, s.chat_model);
+    setModel(fMindSel, fMind, s.presets, s.mind_model);
+  }
+
+  async function loadLlm() {
+    try {
+      const r = await fetch("/api/llm");
+      applyLlmState(await r.json());
+    } catch { /* 拿不到就保持默认，不影响聊天 */ }
+  }
+
+  async function saveLlm(clearKey) {
+    llmResult.className = "result";
+    llmResult.textContent = "保存中…（会做一次连通性自检）";
+    const body = {
+      base_url: fBase.value.trim(),
+      chat_model: readModel(fChatSel, fChat),
+      mind_model: readModel(fMindSel, fMind),
+      temperature: fTemp.value,
+      max_tokens: fMax.value,
+    };
+    if (clearKey) body.clear_key = true;
+    else if (fKey.value.trim()) body.api_key = fKey.value.trim();
+    try {
+      const r = await fetch("/api/llm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const s = await r.json();
+      if (!s.ok) { llmResult.className = "result bad"; llmResult.textContent = s.error || "保存失败"; return; }
+      fKey.value = "";
+      applyLlmState(s);
+      const c = s.check || {};
+      llmResult.className = "result " + (c.ok ? "ok" : "bad");
+      llmResult.textContent = c.ok
+        ? `✓ 已生效并保存（模式：${s.mode}）· ${c.message}`
+        : `已保存，但自检未通过：${c.message}`;
+    } catch (e) {
+      llmResult.className = "result bad";
+      llmResult.textContent = "请求失败：" + e;
+    }
+  }
+
+  $("settingsBtn").addEventListener("click", () => { overlay.classList.add("show"); loadLlm(); });
+  $("llmClose").addEventListener("click", () => overlay.classList.remove("show"));
+  overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.classList.remove("show"); });
+  $("llmSave").addEventListener("click", () => saveLlm(false));
+  $("llmClear").addEventListener("click", () => saveLlm(true));
+
+  // 「清空记录」：只清掉"你看到的"回放（服务端软清空），她的记忆一行不删
+  $("clearHist").addEventListener("click", async () => {
+    if (!confirm("清空你看到的聊天记录？\n她的记忆不会被删除，她依然记得你们聊过的一切。")) return;
+    try {
+      const r = await fetch("/api/history/clear", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ life_id: activeLife }),
+      });
+      const d = await r.json();
+      if (!d.ok) { alert(d.error || "清空失败"); return; }
+      overlay.classList.remove("show");
+      await loadHistory();
+      addSystem("已清空你可见的记录（她的记忆仍在，永远记得）");
+    } catch { alert("清空失败，请稍后再试"); }
+  });
+
+  // ---- 启动：先定"跟谁聊"，再连 WS / 拉历史。顺序不能反，否则回显会对不上人 ----
+  async function boot() {
+    try {
+      const r = await fetch("/api/lives");
+      const lives = (await r.json()).lives || [];
+      if (lives.length) {
+        livesCache = lives;
+        const remembered = localStorage.getItem(LS_LIFE);
+        activeLife = (remembered && lives.some((l) => l.life_id === remembered))
+          ? remembered : lives[0].life_id;
+        localStorage.setItem(LS_LIFE, activeLife);
+        applyActiveHeader();
+        renderConvos();
+      }
+    } catch { /* 拉不到就用默认，WS 仍会推一份列表 */ }
+    loadPreviews();   // 左栏每位最近一条消息（复用历史接口）
+    loadLlm();
+    connect();
+  }
+  boot();
+})();
+</script>
+</body>
+</html>

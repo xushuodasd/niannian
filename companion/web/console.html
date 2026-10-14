@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>孕育 · 生命体</title>
+<link rel="stylesheet" href="/common.css" />
+<style>
+  /* 孕育页专属：外壳、左栏、通用控件/卡片/进度条都在 /common.css，
+     这里只留"孕育生命体"这一页自己的内容样式与创建弹层。 */
+  #count { margin-left: auto; }
+
+  /* ---- 右：详情 ---- */
+  .detail-head { padding: 20px 24px 14px; border-bottom: 1px solid var(--line); }
+  .detail-head .line1 { display: flex; align-items: center; gap: 12px; }
+  .bigav {
+    width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); font-weight: 600; font-size: 21px; flex: none;
+  }
+  .detail-head h2 { margin: 0; font-size: 20px; font-weight: 600; }
+  .detail-head .sub { color: var(--text-3); font-size: 12.5px; margin-top: 2px; }
+  .tabs { display: flex; gap: 4px; padding: 12px 24px 0; border-bottom: 1px solid var(--line); }
+  .tabbtn {
+    border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px;
+    color: var(--text-3); background: transparent;
+  }
+  .tabbtn:hover { background: transparent; color: var(--text); }
+  .tabbtn.on { color: var(--accent); border-bottom-color: var(--accent); }
+  .pane { padding: 20px 24px 40px; display: none; }
+  .pane.on { display: block; }
+
+  .cog { border-top: 1px solid var(--line); padding: 8px 0 4px; }
+  .cog:first-child { border-top: 0; }
+  .cog .t { font-weight: 600; }
+  .cog .u { color: var(--text-2); font-size: 13px; }
+  .cog .m { color: var(--text-3); font-size: 12px; }
+
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12.5px; color: var(--text-3); margin-bottom: 5px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .slider { display: grid; grid-template-columns: 66px 1fr 40px; align-items: center; gap: 8px; font-size: 12.5px; }
+  .slider .n { color: var(--text-3); }
+  .slider .v { text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+  /* ---- 弹层（创建流程）---- */
+  .overlay { position: fixed; inset: 0; background: rgba(47,43,38,.28); display: none; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow-y: auto; z-index: 50; }
+  .overlay.on { display: flex; }
+  .modal { width: 100%; max-width: 720px; background: var(--bg); border: 1px solid var(--line-2); border-radius: 16px; padding: 22px 24px; }
+  .modal h2 { margin: 0 0 4px; font-size: 17px; }
+  .modal .hint { color: var(--text-3); font-size: 12.5px; margin-bottom: 18px; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .modecard { text-align: left; padding: 16px; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface); cursor: pointer; }
+  .modecard:hover { border-color: var(--accent); }
+  .modecard.on { border-color: var(--accent); background: var(--accent-soft); }
+  .modecard .mt { font-weight: 600; margin-bottom: 4px; }
+  .modecard .md { font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
+  .modal .foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+  .pv { display: grid; grid-template-columns: 56px 1fr; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .alert { padding: 9px 12px; border-radius: 9px; font-size: 13px; margin-bottom: 12px; display: none; }
+  .alert.on { display: block; }
+  .alert.err { background: #fbeeec; color: var(--bad); }
+  .alert.ok { background: #eef4ef; color: var(--ok); }
+
+  @media (max-width: 760px) {
+    .pane, .detail-head, .tabs { padding-left: 14px; padding-right: 14px; }
+  }
+</style>
+</head>
+<body>
+<!-- 左栏中部：生命体列表（结构交给统一外壳） -->
+<template id="railTpl"><div class="lifelist" id="lifelist"></div></template>
+
+<!-- 右主区：本页自己的内容与操作 -->
+<template id="mainTpl">
+  <header class="pagehead">
+    <button class="drawer-btn" id="drawerBtn" title="生命体">☰</button>
+    <div class="ptitle">孕育生命体<span class="psub">从空白到成人</span></div>
+    <span class="grow"></span>
+    <button class="primary" id="btnNew">＋ 孕育新生命</button>
+  </header>
+  <div class="pagebody" id="main">
+    <div class="pane on" style="display:block">
+      <div class="empty" style="padding:40px 0">从左边选一位，或点上方「孕育新生命」。</div>
+    </div>
+  </div>
+</template>
+
+<!-- 创建弹层 -->
+<div class="overlay" id="createOverlay">
+  <div class="modal">
+    <h2>新生生命体</h2>
+    <div class="hint">选择一种诞生方式。预览满意后再确认，掷骰重试不会产生垃圾存档。</div>
+    <div class="alert" id="createAlert"></div>
+
+    <div id="stepMode">
+      <div class="modes">
+        <div class="modecard" data-mode="blank">
+          <div class="mt">纯洁体</div>
+          <div class="md">一张白纸：不知自己是谁、不懂这个世界。靠一次次对话，从零开始学着认知。</div>
+        </div>
+        <div class="modecard" data-mode="random">
+          <div class="mt">随机人格</div>
+          <div class="md">掷骰生成一个"像人"的成品人格：有背景、性格、三观。不满意可重掷。</div>
+        </div>
+        <div class="modecard" data-mode="custom">
+          <div class="mt">自定义</div>
+          <div class="md">你亲手写下她的背景、性格与三观，逐项填进表单。</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="stepForm" style="display:none">
+      <div id="randomForm" style="display:none">
+        <div class="two">
+          <div class="field"><label>种子 seed（同种子=同人格，可复现）</label><input id="rSeed" type="number" value="20261013" /></div>
+          <div class="field"><label>性别倾向</label>
+            <select id="rGender"><option value="">随机</option><option value="female">女性</option><option value="male">男性</option><option value="neutral">中性</option></select>
+          </div>
+        </div>
+        <button class="ghost" id="btnDice">🎲 换一个种子</button>
+      </div>
+
+      <div id="blankForm" style="display:none">
+        <div class="two">
+          <div class="field"><label>名字（可留空由系统起）</label><input id="bName" placeholder="例如：小满" /></div>
+          <div class="field"><label>性别</label>
+            <select id="bGender"><option value="neutral">中性</option><option value="female">女性</option><option value="male">男性</option></select>
+          </div>
+        </div>
+        <div class="empty">纯洁体的初始三观、需求、怪癖、背景全为空——这些会随相处慢慢长出来。</div>
+      </div>
+
+      <div id="customForm" style="display:none">
+        <div class="three">
+          <div class="field"><label>名字</label><input id="cName" placeholder="林知夏" /></div>
+          <div class="field"><label>性别</label>
+            <select id="cGender"><option value="female">女性</option><option value="male">男性</option><option value="neutral">中性</option></select>
+          </div>
+          <div class="field"><label>头像（一个字）</label><input id="cAvatar" placeholder="留空取名字末字" /></div>
+        </div>
+        <div class="three">
+          <div class="field"><label>年龄</label><input id="cAge" type="number" placeholder="24" /></div>
+          <div class="field"><label>城市</label><input id="cCity" placeholder="杭州" /></div>
+          <div class="field"><label>职业</label><input id="cJob" placeholder="平面设计师" /></div>
+        </div>
+        <div class="two">
+          <div class="field"><label>爱好（逗号分隔）</label><input id="cHobbies" placeholder="听歌, 看老电影" /></div>
+          <div class="field"><label>宠物（留空=随机；或填"无"）</label><input id="cPet" placeholder="养了只橘猫叫年糕" /></div>
+        </div>
+        <div class="field"><label>背景故事（整段，留空则由上面信息自动拼装）</label><textarea id="cBackstory" placeholder="她是谁、过着怎样的日子……"></textarea></div>
+        <div class="field"><label>性格滑杆</label>
+          <div class="slider"><span class="n">外向</span><input type="range" id="tEnergy" min="0" max="100" value="45"/><span class="v" id="tEnergyV">45</span></div>
+          <div class="slider"><span class="n">温暖</span><input type="range" id="tWarmth" min="0" max="100" value="55"/><span class="v" id="tWarmthV">55</span></div>
+          <div class="slider"><span class="n">情绪稳</span><input type="range" id="tStability" min="0" max="100" value="50"/><span class="v" id="tStabilityV">50</span></div>
+          <div class="slider"><span class="n">敏感</span><input type="range" id="tSensitivity" min="0" max="100" value="50"/><span class="v" id="tSensitivityV">50</span></div>
+        </div>
+        <div class="field"><label>三观 / 信念（每行一条，可写「话题：内容」）</label><textarea id="cBeliefs" placeholder="信任：说到就要做到&#10;生活：一个人也能过得挺好"></textarea></div>
+        <div class="two">
+          <div class="field"><label>她最想要的（每行一条）</label><textarea id="cNeeds" placeholder="被在乎、被回应"></textarea></div>
+          <div class="field"><label>她最怕的（每行一条）</label><textarea id="cFears" placeholder="被敷衍、被当成可有可无"></textarea></div>
+        </div>
+        <div class="field"><label>怪癖 / 偏好（每行一条）</label><textarea id="cQuirks" placeholder="深夜必点外卖"></textarea></div>
+      </div>
+
+      <div id="previewBox" class="pv" style="display:none">
+        <div class="bigav" id="pvAv">?</div>
+        <div id="pvBody"></div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <button class="ghost" id="btnCancel">取消</button>
+      <button id="btnPreview">生成预览</button>
+      <button class="primary" id="btnConfirm" style="display:none">确认新生</button>
+    </div>
+  </div>
+</div>
+
+<script src="/shell.js"></script>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  // 统一外壳：左竖栏 + 底部导航 + 抽屉，结构/样式来自 /common.css 与 /shell.js
+  const refs = Shell.mount({
+    active: "genesis", brand: "孕育",
+    brandExtra: '<span class="tag" id="count">—</span>',
+    railTpl: "railTpl", mainTpl: "mainTpl",
+  });
+  const closeDrawer = refs.closeDrawer;
+
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const ORIGIN_CN = { blank: "纯洁体", random: "随机", custom: "自定义" };
+  const PRESENCE_CN = { active: "在线", busy: "在忙", afk: "暂离", dnd: "勿扰", resting: "小睡", asleep: "睡觉", offline: "离线" };
+  const SOURCE_CN = { dialogue: "自学", taught: "你教的", corrected: "已纠正", innate: "天生" };
+
+  let lives = [];
+  let current = null;       // 当前选中的 life_id
+  let detail = null;        // 当前详情数据
+  let createMode = "blank";
+  let previewLife = null;
+
+  const api = async (url, opts) => {
+    const r = await fetch(url, opts);
+    return r.json();
+  };
+  const post = (url, body) => api(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+  const patch = (url, body) => api(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+  // ================= 列表 =================
+  async function loadLives() {
+    const res = await api("/api/lives");
+    lives = res.lives || [];
+    $("count").textContent = lives.length + " 个生命体";
+    const box = $("lifelist");
+    if (!lives.length) { box.innerHTML = '<div class="empty" style="padding:10px">还没有生命体</div>'; return; }
+    box.innerHTML = lives.map((l) => `
+      <div class="lifeitem ${l.origin} ${l.life_id === current ? "on" : ""}" data-id="${esc(l.life_id)}">
+        <div class="av">${esc(l.avatar || "?")}</div>
+        <div>
+          <div class="nm">${esc(l.name)}
+            <span class="tag ${l.origin}">${ORIGIN_CN[l.origin] || l.origin}</span>
+          </div>
+          <div class="meta">
+            <span class="dot ${l.presence}"></span>${PRESENCE_CN[l.presence] || l.presence}
+            <span>·</span>认知 ${l.cognition}
+            ${l.origin === "blank" ? `<span>·</span>成熟 ${Math.round((l.awareness || 0) * 100)}%` : ""}
+          </div>
+        </div>
+      </div>`).join("");
+    box.querySelectorAll(".lifeitem").forEach((el) => el.onclick = () => selectLife(el.dataset.id));
+  }
+
+  async function selectLife(id) {
+    current = id;
+    closeDrawer();
+    await loadLives();
+    const res = await api("/api/lives/" + encodeURIComponent(id));
+    if (!res.ok) { $("main").innerHTML = `<div class="pane on" style="display:block"><div class="alert err on">${esc(res.error)}</div></div>`; return; }
+    detail = res;
+    renderDetail();
+  }
+
+  // ================= 详情 =================
+  function renderDetail() {
+    const p = detail.profile, g = detail.growth, rel = detail.relationship;
+    const emo = p.emotional || {};
+    $("main").innerHTML = `
+      <div class="detail-head">
+        <div class="line1">
+          <div class="bigav">${esc(p.avatar || "?")}</div>
+          <div>
+            <h2>${esc(p.name)} <span class="tag ${p.origin}">${ORIGIN_CN[p.origin] || p.origin}</span></h2>
+            <div class="sub">${esc(p.gender)} · ${esc(p.life_id)} · 诞生于 ${esc((p.born_at || "").slice(0, 16).replace("T", " "))}</div>
+          </div>
+        </div>
+      </div>
+      <div class="tabs">
+        <button class="tabbtn on" data-tab="overview">概览</button>
+        <button class="tabbtn" data-tab="profile">人格档案</button>
+        <button class="tabbtn" data-tab="cognition">认知</button>
+        <button class="tabbtn" data-tab="growth">成长轨迹</button>
+        <button class="tabbtn" data-tab="ops">操作</button>
+      </div>
+
+      <div class="pane on" id="pane-overview">${overviewHTML(p, g, rel)}</div>
+      <div class="pane" id="pane-profile">${profileHTML(p)}</div>
+      <div class="pane" id="pane-cognition">${cognitionHTML(p, g)}</div>
+      <div class="pane" id="pane-growth">${growthHTML(p, g, rel)}</div>
+      <div class="pane" id="pane-ops">${opsHTML(p)}</div>`;
+
+    $("main").querySelectorAll(".tabbtn").forEach((b) => b.onclick = () => {
+      $("main").querySelectorAll(".tabbtn").forEach((x) => x.classList.toggle("on", x === b));
+      $("main").querySelectorAll(".pane").forEach((x) => x.classList.toggle("on", x.id === "pane-" + b.dataset.tab));
+    });
+    bindProfile();
+    bindCognition();
+    bindOps();
+  }
+
+  // 只刷新详情、保留当前标签页（教导/纠错/删除后原地更新，不跳回概览）
+  async function refreshDetail(tab) {
+    const res = await api("/api/lives/" + encodeURIComponent(current));
+    if (!res.ok) return;
+    detail = res;
+    renderDetail();
+    if (tab) {
+      const b = $("main").querySelector('.tabbtn[data-tab="' + tab + '"]');
+      if (b) b.click();
+    }
+  }
+
+  function awarenessLine(p) {
+    if (p.origin !== "blank") return `<div class="kv"><span class="k">认知成熟度</span><span class="v">成人（固定）</span></div>`;
+    const a = Math.round((p.awareness || 0) * 100);
+    const label = a < 25 ? "初生" : (a < 65 ? "成长中" : "接近成人");
+    return `<div class="kv"><span class="k">认知成熟度（${label}）</span><span class="v">${a}%</span></div>
+      <div class="bar ${a < 25 ? "slate" : ""}"><i style="width:${a}%"></i></div>`;
+  }
+
+  function overviewHTML(p, g, rel) {
+    const emo = p.emotional || {};
+    return `<div class="grid">
+      <div class="card"><h3>她是谁</h3>
+        ${awarenessLine(p)}
+        <div class="kv"><span class="k">状态</span><span class="v">${PRESENCE_CN[p.presence] || p.presence || "—"} · ${esc(p.mood_label || "")}</span></div>
+        <div class="kv"><span class="k">当前位置</span><span class="v">${esc(p.canon && p.canon["职业"] || "—")}</span></div>
+        <div class="kv"><span class="k">宠物</span><span class="v">${esc(p.canon && p.canon["宠物"] || "—")}</span></div>
+        <div style="margin-top:10px;color:var(--text-2);font-size:13px">${esc(p.backstory || "（还没有背景——她会随经历慢慢长出来）")}</div>
+      </div>
+      <div class="card"><h3>情绪与关系</h3>
+        <div class="rowline"><span class="lbl">情绪极性</span><div class="bar"><i style="width:${Math.round((((emo.valence||0)+1)/2)*100)}%"></i></div><span class="v">${(emo.valence||0).toFixed(2)}</span></div>
+        <div class="rowline"><span class="lbl">唤醒</span><div class="bar"><i style="width:${Math.round((emo.arousal||0)*100)}%"></i></div><span class="v">${(emo.arousal||0).toFixed(2)}</span></div>
+        <div class="rowline"><span class="lbl">自控</span><div class="bar ok"><i style="width:${Math.round((emo.self_control||0)*100)}%"></i></div><span class="v">${(emo.self_control||0).toFixed(2)}</span></div>
+        <div class="rowline"><span class="lbl">疲惫</span><div class="bar slate"><i style="width:${Math.round((emo.fatigue||0)*100)}%"></i></div><span class="v">${(emo.fatigue||0).toFixed(2)}</span></div>
+        <div class="kv" style="margin-top:8px"><span class="k">与「${esc(rel ? rel.user_id : "—")}」</span><span class="v">${rel ? esc(rel.stage) : "—"}</span></div>
+        ${rel ? `<div class="kv"><span class="k">亲密/信任</span><span class="v">${rel.intimacy.toFixed(2)} / ${rel.trust.toFixed(2)}</span></div>
+        <div class="kv"><span class="k">互动轮数</span><span class="v">${rel.interactions} 轮</span></div>` : ""}
+      </div>
+      <div class="card"><h3>性格速览</h3>
+        ${traitBars(p)}
+        <div style="margin-top:8px">${(p.quirks || []).slice(0, 5).map((q) => `<span class="chip">${esc(q.content)}</span>`).join("") || '<span class="empty">暂无怪癖</span>'}</div>
+      </div>
+    </div>`;
+  }
+
+  function traitBars(p) {
+    const t = p.big_five || {};
+    const rows = [["外向", t.extraversion], ["宜人", t.agreeableness], ["尽责", t.conscientiousness], ["开放", t.openness], ["神经质", t.neuroticism]];
+    return rows.map(([n, v]) => `<div class="rowline"><span class="lbl">${n}</span><div class="bar"><i style="width:${Math.round((v||0)*100)}%"></i></div><span class="v">${(v||0).toFixed(2)}</span></div>`).join("");
+  }
+
+  function profileHTML(p) {
+    const beliefs = (p.beliefs || []).map((b) => `${b.topic}：${b.statement}`).join("\n");
+    const needs = (p.needs_fears || []).filter((n) => n.kind === "need").map((n) => n.content).join("\n");
+    const fears = (p.needs_fears || []).filter((n) => n.kind === "fear").map((n) => n.content).join("\n");
+    const quirks = (p.quirks || []).map((q) => q.content).join("\n");
+    const awareness = Math.round((p.awareness || 0) * 100);
+    return `<div class="alert" id="editAlert"></div>
+      <div class="card">
+        <div class="three">
+          <div class="field"><label>名字</label><input id="eName" value="${esc(p.name)}" /></div>
+          <div class="field"><label>头像（一个字）</label><input id="eAvatar" value="${esc(p.avatar)}" /></div>
+          <div class="field"><label>性别</label>
+            <select id="eGender">
+              ${["female","male","neutral"].map((g) => `<option value="${g}" ${p.gender===g?"selected":""}>${g}</option>`).join("")}
+            </select>
+          </div>
+        </div>
+        <div class="field"><label>背景故事</label><textarea id="eBackstory">${esc(p.backstory)}</textarea></div>
+        <div class="field"><label>三观 / 信念（每行一条，可写「话题：内容」）</label><textarea id="eBeliefs">${esc(beliefs)}</textarea></div>
+        <div class="two">
+          <div class="field"><label>她最想要的</label><textarea id="eNeeds">${esc(needs)}</textarea></div>
+          <div class="field"><label>她最怕的</label><textarea id="eFears">${esc(fears)}</textarea></div>
+        </div>
+        <div class="field"><label>怪癖 / 偏好</label><textarea id="eQuirks">${esc(quirks)}</textarea></div>
+        <div class="field"><label>认知成熟度：<span id="eAwareV">${awareness}</span>%</label>
+          <input type="range" id="eAware" min="0" max="100" value="${awareness}" />
+        </div>
+        <button class="primary" id="btnSaveProfile">保存档案</button>
+      </div>`;
+  }
+
+  function bindProfile() {
+    const av = $("eAware"), lbl = $("eAwareV");
+    if (av) av.oninput = () => lbl.textContent = av.value;
+    const btn = $("btnSaveProfile");
+    if (btn) btn.onclick = saveProfile;
+  }
+
+  function linesToBeliefs(text) {
+    return (text || "").split("\n").map((s) => s.trim()).filter(Boolean).map((line) => {
+      const i = line.search(/[：:]/);
+      if (i > 0) return { topic: line.slice(0, i).trim(), statement: line.slice(i + 1).trim() };
+      return { topic: "自我", statement: line };
+    });
+  }
+  const lines = (text) => (text || "").split("\n").map((s) => s.trim()).filter(Boolean);
+
+  async function saveProfile() {
+    const alert = $("editAlert");
+    const body = {
+      name: $("eName").value.trim(),
+      avatar: $("eAvatar").value.trim(),
+      gender: $("eGender").value,
+      backstory: $("eBackstory").value,
+      awareness: Number($("eAware").value) / 100,
+      beliefs: linesToBeliefs($("eBeliefs").value),
+      quirks: lines($("eQuirks").value),
+      needs_fears: [
+        ...lines($("eNeeds").value).map((c) => ({ kind: "need", content: c })),
+        ...lines($("eFears").value).map((c) => ({ kind: "fear", content: c })),
+      ],
+    };
+    const res = await patch("/api/lives/" + encodeURIComponent(current), body);
+    alert.className = "alert on " + (res.ok ? "ok" : "err");
+    alert.textContent = res.ok ? "已保存" : (res.error || "保存失败");
+    if (res.ok) { await loadLives(); await selectLife(current); }
+  }
+
+  function growthHTML(p, g, rel) {
+    const cog = g.cognition || [];
+    return `<div class="grid">
+      <div class="card"><h3>成长进度</h3>
+        ${awarenessLine(p)}
+        <div class="kv"><span class="k">习得认知</span><span class="v">${g.cognition_count} 条</span></div>
+        <div class="kv"><span class="k">三观</span><span class="v">${(p.beliefs || []).length} 条</span></div>
+        <div class="kv"><span class="k">对话轮数</span><span class="v">${g.rounds} 轮</span></div>
+        <div class="kv"><span class="k">与对方关系</span><span class="v">${rel ? esc(rel.stage) : "—"}</span></div>
+      </div>
+      <div class="card" style="grid-column:1/-1"><h3>她已经懂的事（认知习得）</h3>
+        ${cog.length ? cog.map((c) => `<div class="cog">
+            <div class="t">${esc(c.topic)} <span class="m">· 确信度 ${Number(c.confidence).toFixed(2)} · 接触 ${c.exposure_count} 次</span></div>
+            <div class="u">${esc(c.understanding)}</div>
+          </div>`).join("") : '<div class="empty">还没有学到什么——多和她聊聊，认知会长出来。</div>'}
+      </div>
+      <div class="card" style="grid-column:1/-1"><h3>三观（信念）</h3>
+        ${(p.beliefs || []).length ? (p.beliefs || []).map((b) => `<div class="belief">
+            <div><span class="t">${esc(b.topic)}</span> ${esc(b.statement)}${b.identity_locked ? ' <span class="chip">核心</span>' : ""}</div>
+            <div class="bar"><i style="width:${Math.round((b.confidence||0)*100)}%"></i></div>
+          </div>`).join("") : '<div class="empty">还没有形成三观（纯洁体会随反复相处慢慢长出）。</div>'}
+      </div>
+    </div>`;
+  }
+
+  function cognitionHTML(p, g) {
+    const cog = g.cognition || [];
+    return `<div class="card">
+        <h3>教你一条（她会记住，之后不易被带偏）</h3>
+        <div class="two">
+          <div class="field"><label>话题（简短名词）</label><input id="cogTopic" placeholder="例如：月亮" /></div>
+          <div class="field"><label>她的理解</label><input id="cogUnd" placeholder="例如：月亮是地球的卫星" /></div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="primary" id="btnTeach">教给她</button>
+          <span class="empty" id="cogAlert"></span>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3>她已经懂的事（${g.cognition_count || cog.length} 条）</h3>
+        ${cog.length ? cog.map((c) => `
+          <div class="cog" data-cid="${c.id}">
+            <div class="t">${esc(c.topic)}
+              <span class="tag ${c.source === "taught" ? "custom" : (c.source === "corrected" ? "blank" : "")}">${SOURCE_CN[c.source] || c.source}</span>
+              ${c.locked ? '<span class="chip">已上锁</span>' : ""}
+              <span class="m">· 确信度 ${Number(c.confidence).toFixed(2)} · 接触 ${c.exposure_count} 次${c.correction_count ? " · 纠正 " + c.correction_count + " 次" : ""}</span>
+            </div>
+            <div class="u">${esc(c.understanding)}</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="cbtn" data-act="correct" data-cid="${c.id}">纠错</button>
+              <button class="cbtn danger" data-act="delete" data-cid="${c.id}">删除</button>
+            </div>
+          </div>`).join("") : '<div class="empty">还没有学到什么——多和她聊聊，或直接用上面的表单教她一条。</div>'}
+      </div>`;
+  }
+
+  function bindCognition() {
+    const teach = $("btnTeach");
+    if (teach) teach.onclick = async () => {
+      const topic = $("cogTopic").value.trim(), understanding = $("cogUnd").value.trim();
+      const al = $("cogAlert");
+      if (!topic || !understanding) { al.textContent = "话题和理解都要填"; return; }
+      const res = await post("/api/lives/" + encodeURIComponent(current) + "/cognition", { topic, understanding });
+      if (res.ok) await refreshDetail("cognition");
+      else al.textContent = res.error || "教导失败";
+    };
+    $("main").querySelectorAll(".cbtn").forEach((b) => b.onclick = async () => {
+      const cid = b.dataset.cid;
+      if (b.dataset.act === "delete") {
+        if (!confirm("删除这条认知？她的原始聊天记录不受影响。")) return;
+        const res = await api("/api/lives/" + encodeURIComponent(current) + "/cognition/" + cid, { method: "DELETE" });
+        if (res.ok) await refreshDetail("cognition"); else alert(res.error);
+      } else {
+        startCorrect(cid, b);
+      }
+    });
+  }
+
+  function startCorrect(cid, btn) {
+    const u = btn.closest(".cog").querySelector(".u");
+    const cur = u.textContent;
+    u.innerHTML = `<div style="display:flex;gap:8px;margin-top:4px">
+        <input class="cedit" value="${esc(cur)}" />
+        <button class="primary csave">保存</button>
+        <button class="csave-cancel">取消</button>
+      </div>`;
+    u.querySelector(".csave-cancel").onclick = () => refreshDetail("cognition");
+    u.querySelector(".csave").onclick = async () => {
+      const val = u.querySelector(".cedit").value.trim();
+      if (!val) return;
+      const res = await post("/api/lives/" + encodeURIComponent(current) + "/cognition/" + cid + "/correct", { understanding: val });
+      if (res.ok) await refreshDetail("cognition"); else alert(res.error);
+    };
+  }
+
+  function opsHTML(p) {
+    const isDefault = p.life_id === (window.__defaultLife || "");
+    return `<div class="card">
+      <div class="field"><label>打开方式</label>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <a class="link" href="/" target="_blank" style="border-color:var(--line-2)">→ 去夜话找她</a>
+          <a class="link" href="/debug.html" target="_blank" style="border-color:var(--line-2)">→ 看她的心象</a>
+        </div>
+      </div>
+      <div class="field"><label>导出人格档案（JSON，可用于备份 / 分享 / 二次编辑）</label>
+        <button id="btnExport">导出 life.json</button>
+      </div>
+      <div class="field"><label>克隆（复制一份独立人格，不继承关系与心理状态）</label>
+        <div style="display:flex;gap:8px"><input id="cloneName" placeholder="新名字（留空=原名·副本）" style="max-width:260px"/><button id="btnClone">克隆</button></div>
+      </div>
+      <div class="field"><label>移除（连同她的对话与记忆一起清理，不可恢复）</label>
+        <button class="danger" id="btnDelete" ${isDefault ? "disabled" : ""}>删除这个生命体</button>
+        ${isDefault ? '<div class="empty" style="margin-top:6px">这是当前默认生命体，不能删除</div>' : ""}
+      </div>
+    </div>`;
+  }
+
+  function bindOps() {
+    $("btnExport").onclick = async () => {
+      const res = await api("/api/lives/" + encodeURIComponent(current) + "/export");
+      if (!res.ok) return alert(res.error);
+      const blob = new Blob([JSON.stringify(res.life, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (res.life.name || "life") + ".life.json";
+      a.click(); URL.revokeObjectURL(a.href);
+    };
+    $("btnClone").onclick = async () => {
+      const name = $("cloneName").value.trim();
+      const res = await post("/api/lives/" + encodeURIComponent(current) + "/clone", { name });
+      if (res.ok) { await loadLives(); await selectLife(res.life.life_id); }
+      else alert(res.error);
+    };
+    const del = $("btnDelete");
+    if (del && !del.disabled) del.onclick = async () => {
+      if (!confirm("确定删除这个生命体？她的对话与记忆会一起清除，无法恢复。")) return;
+      const res = await api("/api/lives/" + encodeURIComponent(current), { method: "DELETE" });
+      if (res.ok) { current = null; detail = null; await loadLives(); $("main").innerHTML = '<div class="pane on" style="display:block"><div class="empty" style="padding:40px 0">已删除。从左边选一个生命体，或新生一个。</div></div>'; }
+      else alert(res.error);
+    };
+  }
+
+  // ================= 创建 =================
+  function openCreate() {
+    previewLife = null;
+    $("createAlert").className = "alert";
+    $("stepMode").style.display = "block";
+    $("stepForm").style.display = "none";
+    $("previewBox").style.display = "none";
+    $("btnPreview").style.display = "";
+    $("btnConfirm").style.display = "none";
+    setMode("blank");
+    $("createOverlay").classList.add("on");
+  }
+  function closeCreate() { $("createOverlay").classList.remove("on"); }
+
+  function setMode(m) {
+    createMode = m;
+    document.querySelectorAll(".modecard").forEach((el) => el.classList.toggle("on", el.dataset.mode === m));
+    $("stepForm").style.display = "block";
+    $("randomForm").style.display = m === "random" ? "" : "none";
+    $("blankForm").style.display = m === "blank" ? "" : "none";
+    $("customForm").style.display = m === "custom" ? "" : "none";
+    $("previewBox").style.display = "none";
+    $("btnPreview").style.display = "";
+    $("btnConfirm").style.display = "none";
+  }
+
+  function buildCreateBody() {
+    const body = { mode: createMode };
+    if (createMode === "random") {
+      body.seed = parseInt($("rSeed").value || "0", 10) || 0;
+      if ($("rGender").value) body.gender = $("rGender").value;
+    } else if (createMode === "blank") {
+      if ($("bName").value.trim()) body.name = $("bName").value.trim();
+      body.gender = $("bGender").value;
+    } else {
+      body.name = $("cName").value.trim();
+      body.gender = $("cGender").value;
+      body.avatar = $("cAvatar").value.trim();
+      body.age = parseInt($("cAge").value || "0", 10) || undefined;
+      body.city = $("cCity").value.trim();
+      body.job = $("cJob").value.trim();
+      body.hobbies = $("cHobbies").value.trim();
+      const pet = $("cPet").value.trim();
+      if (pet === "无" || pet === "没有") body.no_pet = true; else if (pet) body.pet = pet;
+      body.backstory = $("cBackstory").value.trim();
+      body.traits = {
+        energy: $("tEnergy").value / 100, warmth: $("tWarmth").value / 100,
+        stability: $("tStability").value / 100, sensitivity: $("tSensitivity").value / 100,
+      };
+      body.beliefs = linesToBeliefs($("cBeliefs").value);
+      body.quirks = lines($("cQuirks").value);
+      body.needs_fears = [
+        ...lines($("cNeeds").value).map((c) => ({ kind: "need", content: c })),
+        ...lines($("cFears").value).map((c) => ({ kind: "fear", content: c })),
+      ];
+    }
+    return body;
+  }
+
+  function renderPreview(life) {
+    $("pvAv").textContent = life.avatar || "?";
+    const beliefs = (life.beliefs || []).map((b) => `${b.topic}：${b.statement}`).join("；") || "（暂无）";
+    const needs = (life.needs_fears || []).map((n) => n.content).join("；") || "（暂无）";
+    $("pvBody").innerHTML = `
+      <div style="font-weight:600;font-size:16px">${esc(life.name)} <span class="tag ${life.origin}">${ORIGIN_CN[life.origin]}</span></div>
+      <div class="sub" style="color:var(--text-3);font-size:12.5px;margin:2px 0 8px">${esc(life.gender)} · seed ${life.seed}</div>
+      <div style="color:var(--text-2);font-size:13px;margin-bottom:8px">${esc(life.backstory || "（无背景：纯洁体从零开始）")}</div>
+      <div class="mono" style="margin-bottom:4px">大五：${esc(bf(life.big_five))}</div>
+      <div style="font-size:13px"><span class="empty">三观：</span>${esc(beliefs)}</div>
+      <div style="font-size:13px"><span class="empty">需求/恐惧：</span>${esc(needs)}</div>`;
+    $("previewBox").style.display = "grid";
+    $("btnPreview").style.display = "";
+    $("btnConfirm").style.display = "";
+  }
+  function bf(t) {
+    t = t || {};
+    return `外向${(t.extraversion||0).toFixed(2)} 宜人${(t.agreeableness||0).toFixed(2)} 尽责${(t.conscientiousness||0).toFixed(2)} 开放${(t.openness||0).toFixed(2)} 神经质${(t.neuroticism||0).toFixed(2)}`;
+  }
+
+  // ---- 绑定 ----
+  $("btnNew").onclick = openCreate;
+  $("btnCancel").onclick = closeCreate;
+  $("createOverlay").onclick = (e) => { if (e.target === $("createOverlay")) closeCreate(); };
+  document.querySelectorAll(".modecard").forEach((el) => el.onclick = () => setMode(el.dataset.mode));
+  $("btnDice").onclick = () => $("rSeed").value = Math.floor(Math.random() * 900000000) + 100000000;
+  [["tEnergy","tEnergyV"],["tWarmth","tWarmthV"],["tStability","tStabilityV"],["tSensitivity","tSensitivityV"]]
+    .forEach(([a,b]) => { const s=$(a), v=$(b); s.oninput = () => v.textContent = s.value; });
+
+  $("btnPreview").onclick = async () => {
+    const res = await post("/api/lives/preview", buildCreateBody());
+    const alert = $("createAlert");
+    if (!res.ok) { alert.className = "alert on err"; alert.textContent = res.error || "预览失败"; return; }
+    alert.className = "alert"; previewLife = res.life;
+    renderPreview(res.life);
+  };
+  $("btnConfirm").onclick = async () => {
+    if (!previewLife) return;
+    const body = buildCreateBody();
+    body.seed = previewLife.seed;
+    const res = await post("/api/lives", body);
+    const alert = $("createAlert");
+    if (!res.ok) { alert.className = "alert on err"; alert.textContent = res.error || "创建失败"; return; }
+    await loadLives();
+    closeCreate();
+    await selectLife(res.life.life_id);
+  };
+
+  // ---- 启动 ----
+  api("/api/llm").then((r) => { window.__defaultLife = ""; }).catch(() => {});
+  loadLives().then(() => { if (lives.length) selectLife(lives[0].life_id); });
+  // 默认生命体：从列表第一个（后端按载入顺序）印证，删除保护在后端已兜底
+  api("/api/lives").then((r) => { window.__defaultLife = (r.lives && r.lives[0] && r.lives[0].life_id) || ""; });
+})();
+</script>
+</body>
+</html>

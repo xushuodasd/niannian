@@ -1,0 +1,6 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+aiosqlite>=0.20
+loguru>=0.7
+openai>=1.40

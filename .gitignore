@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 虚拟环境
+.venv/
+venv/
+
+# 运行时用户数据：数据库 / 备份 / settings.json（含 API Key，严禁入库）
+companion/data/
+
+# 生命体存档（运行时生成的用户数据；默认人格由代码 default_life() 兜底，丢失无损）
+companion/personas/
+
+# 日志与临时文件
+*.log
+*.tmp
+*.bak
+
+# IDE / 系统
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

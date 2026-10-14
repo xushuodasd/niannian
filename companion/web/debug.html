@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<title>心象 · 她此刻的内心</title>
+<link rel="stylesheet" href="/common.css" />
+<style>
+  /* 心象页专属：外壳、左栏、通用控件、卡片/进度条等都在 /common.css，
+     这里只留"她此刻的内心"这一页自己的内容样式。 */
+  #conn { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--surface-3); color: var(--text-3); }
+  #conn.on { color: var(--ok); }
+
+  /* 操作条：工程按钮从页头挪出来，分组排好 */
+  .toolbar {
+    display: flex; align-items: center; gap: 22px; flex-wrap: wrap; row-gap: 10px;
+    padding: 11px 24px; border-bottom: 1px solid var(--line); background: var(--surface-3);
+  }
+  .tgroup { display: flex; align-items: center; gap: 6px; }
+  .tgroup .tlabel { font-size: 12px; color: var(--text-3); margin-right: 2px; }
+  .toolbar button { background: var(--surface); }
+  .toolbar button:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+
+  /* 内容区留白（网格本身用共用 .grid） */
+  .wrap { padding: 20px 24px; }
+
+  @media (max-width: 760px) {
+    .toolbar { padding: 10px 14px; gap: 14px; }
+    .wrap { padding: 14px; }
+  }
+</style>
+</head>
+<body>
+<!-- 左栏中部：生命体列表（结构交给统一外壳，壳里再填入本模板） -->
+<template id="railTpl"><div class="lifelist" id="lifeList"></div></template>
+
+<!-- 右主区：本页自己的内容与操作 -->
+<template id="mainTpl">
+  <header class="pagehead">
+    <button class="drawer-btn" id="drawerBtn" title="生命体">☰</button>
+    <div class="ptitle">她此刻的内心<span class="psub">实时 · 慢层</span></div>
+    <span class="grow"></span>
+    <span id="conn">未连接</span>
+  </header>
+
+  <section class="toolbar">
+    <div class="tgroup"><span class="tlabel">在场</span>
+      <button id="forceActive">在线</button>
+      <button id="forceBusy">忙碌</button>
+      <button id="forceResting">小睡</button>
+      <button id="forceAsleep">睡觉</button>
+    </div>
+    <div class="tgroup"><span class="tlabel">唤醒</span>
+      <button id="wakeNow">唤醒她</button>
+      <button id="sleepBack">让她睡回去</button>
+    </div>
+    <div class="tgroup"><span class="tlabel">时间流速</span>
+      <button data-scale="1">1×</button>
+      <button data-scale="60">60×</button>
+      <button data-scale="720">720×</button>
+    </div>
+  </section>
+
+  <div class="pagebody">
+    <div class="wrap grid">
+      <div class="card"><h2>此刻的她<span class="h2sub">慢层 · 在场</span></h2><div id="p-state"></div></div>
+      <div class="card"><h2>心里的事<span class="h2sub">情绪 · 自控</span></h2><div id="p-psyche"></div></div>
+      <div class="card"><h2>她和你<span class="h2sub">关系</span></h2><div id="p-rel"></div></div>
+      <div class="card"><h2>她信什么<span class="h2sub">三观 · 信念</span></h2><div id="p-belief"></div></div>
+      <div class="card"><h2>她的底子<span class="h2sub">气质 · 大五</span></h2><div id="p-trait"></div></div>
+      <div class="card"><h2>还没顾上回的话<span class="h2sub">收件箱</span></h2><div id="p-inbox"></div></div>
+    </div>
+  </div>
+</template>
+
+<script src="/shell.js"></script>
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  // 统一外壳：左竖栏 + 底部导航 + 抽屉，结构/样式来自 /common.css 与 /shell.js
+  const refs = Shell.mount({ active: "mind", brand: "心象", railTpl: "railTpl", mainTpl: "mainTpl" });
+  const closeDrawer = refs.closeDrawer;
+
+  let ws = null, curLife = null, timer = null;
+  let livesCache = [];
+
+  const PN = { active: "在线", busy: "忙碌", afk: "暂时离开", dnd: "勿扰",
+               resting: "小睡中", asleep: "睡觉中", offline: "离线" };
+  const TN = { idle: "空闲", perceiving: "感知中", thinking: "思考中",
+               speaking: "说话中", stopping: "停止中" };
+  const DOT = { active: "", busy: "busy", afk: "busy", dnd: "busy",
+                resting: "sleep", asleep: "sleep", offline: "off" };
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"]/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+  function bar(v, lo, hi, cls) {
+    const pct = Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+    return `<div class="bar ${cls || ""}"><i style="width:${pct.toFixed(1)}%"></i></div>`;
+  }
+  function rowline(label, v, lo, hi, cls) {
+    return `<div class="rowline"><span class="lbl">${esc(label)}</span>${bar(v, lo, hi, cls)}` +
+           `<span class="num">${Number(v).toFixed(2)}</span></div>`;
+  }
+  function kv(k, v) { return `<div class="kv"><span class="k">${esc(k)}</span><span class="v">${esc(v)}</span></div>`; }
+
+  function render(d) {
+    if (!d || !d.life_id) { return; }
+    $("p-state").innerHTML =
+      kv("姓名", d.name) +
+      kv("在场", PN[d.presence] || d.presence) +
+      kv("正在", TN[d.turn_state] || d.turn_state || "—") +
+      kv("自何时", (d.state_since || "").slice(11, 16) || "—") +
+      kv("上头状态", d.override_state) +
+      kv("唤醒值", Number(d.wake_progress).toFixed(2)) +
+      bar(d.wake_progress, 0, 1, "purple") +
+      kv("时间流速", d.time_scale + "×");
+
+    $("p-psyche").innerHTML =
+      kv("心情", d.mood_label) + bar(d.mood_baseline, -1, 1, "ok") +
+      rowline("长期底色", d.mood_baseline, -1, 1) +
+      rowline("情绪极性", d.emotion_valence, -1, 1) +
+      rowline("唤醒度", d.emotion_arousal, 0, 1, "warn") +
+      rowline("自控力", d.self_control, 0, 1, "ok") +
+      rowline("疲惫", d.fatigue, 0, 1, "bad");
+
+    const rels = d.relationships || {};
+    const keys = Object.keys(rels);
+    $("p-rel").innerHTML = keys.length ? keys.map((uid) => {
+      const r = rels[uid];
+      return `<div class="kv"><span class="k">${esc(uid)}</span><span class="v">${esc(r.stage)} · ${r.interactions} 次</span></div>` +
+        rowline("亲密", r.intimacy, 0, 1, "ok") + rowline("信任", r.trust, 0, 1, "ok") +
+        rowline("依赖", r.dependence, 0, 1, "purple") + rowline("熟悉", r.familiarity, 0, 1);
+    }).join("") : `<div class="empty">还没走近谁——等她收到第一条消息</div>`;
+
+    const bs = d.beliefs || [];
+    $("p-belief").innerHTML = bs.length ? bs.map((b) =>
+      `<div class="belief"><div class="kv"><span class="k">${esc(b.topic)}</span>` +
+      `<span class="v">${b.locked ? '<span class="chip lock">核心</span>' : ""}</span></div>` +
+      `<div class="mono">${esc(b.statement)}</div>${bar(b.confidence, 0, 1, "ok")}</div>`
+    ).join("") : `<div class="empty">还没形成明确的三观</div>`;
+
+    const t = d.temperament || {}, bf = d.big_five || {};
+    const dims = ["activity_level", "regularity", "approach", "adaptability", "threshold",
+                  "intensity", "mood_quality", "distractibility", "persistence"];
+    const cn = { activity_level: "活动", regularity: "规律", approach: "趋近", adaptability: "适应",
+                 threshold: "敏感", intensity: "强度", mood_quality: "心境", distractibility: "分心",
+                 persistence: "坚持", openness: "开放", conscientiousness: "尽责",
+                 extraversion: "外向", agreeableness: "宜人", neuroticism: "神经质" };
+    $("p-trait").innerHTML = dims.concat(Object.keys(bf))
+      .filter((k) => t[k] != null || bf[k] != null)
+      .map((k) => rowline(cn[k] || k, (t[k] != null ? t[k] : bf[k]), 0, 1)).join("");
+
+    const ib = d.inbox || [];
+    $("p-inbox").innerHTML = ib.length ? ib.map((i) =>
+      `<div class="kv"><span class="k">${esc((i.received_at || "").slice(11, 16))}</span>` +
+      `<span class="v">[${esc(i.status)}] ${esc((i.content || "").slice(0, 24))}</span></div>`
+    ).join("") : `<div class="empty">没有搁着没回的话</div>`;
+  }
+
+  function drawLifeList() {
+    const box = $("lifeList");
+    if (!livesCache.length) { box.innerHTML = '<div class="empty" style="padding:8px">还没有生命体</div>'; return; }
+    box.innerHTML = livesCache.map((l) => `
+      <div class="lifeitem ${l.life_id === curLife ? "on" : ""}" data-id="${esc(l.life_id)}">
+        <div class="av">${esc(l.avatar || (l.name || "").slice(-1) || "?")}</div>
+        <div>
+          <div class="nm">${esc(l.name)}</div>
+          <div class="meta"><span class="dot ${DOT[l.presence] || ""}"></span>${esc(PN[l.presence] || l.presence)}</div>
+        </div>
+      </div>`).join("");
+    box.querySelectorAll(".lifeitem").forEach((el) => el.onclick = () => selectLife(el.dataset.id));
+  }
+
+  function renderLives(lives) {
+    livesCache = lives || [];
+    if (!livesCache.length) { drawLifeList(); return; }
+    if (!curLife || !livesCache.some((l) => l.life_id === curLife)) curLife = livesCache[0].life_id;
+    drawLifeList();
+  }
+
+  function selectLife(id) {
+    if (!id) return;
+    curLife = id;
+    closeDrawer();
+    drawLifeList();
+    send({ type: "switch", life_id: id });
+    poll();
+  }
+
+  function send(obj) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+  function poll() { send({ type: "debug", life_id: curLife || undefined }); }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+    ws.onopen = () => {
+      $("conn").textContent = "已连接"; $("conn").classList.add("on");
+      send({ type: "list_lives" });
+      timer = setInterval(poll, 1500);
+      poll();
+    };
+    ws.onclose = () => {
+      $("conn").textContent = "已断开"; $("conn").classList.remove("on");
+      clearInterval(timer); setTimeout(connect, 3000);
+    };
+    ws.onmessage = (ev) => {
+      let e; try { e = JSON.parse(ev.data); } catch { return; }
+      if (e.type === "lives") renderLives(e.lives || []);
+      else if (e.type === "debug") render(e.data);
+    };
+  }
+
+  const ctrl = (action, extra) => send({ type: "control", action, life_id: curLife, ...(extra || {}) });
+  $("forceActive").onclick = () => ctrl("force_state", { state: "active" });
+  $("forceBusy").onclick = () => ctrl("force_state", { state: "busy" });
+  $("forceResting").onclick = () => ctrl("force_state", { state: "resting" });
+  $("forceAsleep").onclick = () => ctrl("force_state", { state: "asleep" });
+  $("wakeNow").onclick = () => ctrl("wake_now");
+  $("sleepBack").onclick = () => ctrl("sleep_back");
+  document.querySelectorAll("button[data-scale]").forEach((b) => {
+    b.onclick = () => ctrl("set_time_scale", { scale: Number(b.dataset.scale) });
+  });
+
+  connect();
+})();
+</script>
+</body>
+</html>

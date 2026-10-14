@@ -1,0 +1,138 @@
+# AI 自主对话陪伴程序 —— Demo 配置
+# 所有"可调参数"都外置在这里，方便后期调参不用改代码。
+
+[server]
+host = "127.0.0.1"
+port = 8788
+
+[engine]
+# 全局时间倍速：1x 正常聊天 / 60x 快速验证作息与唤醒 / 720x 模拟跨天
+time_scale = 1.0
+# 随机种子（可复现）：留空则每次随机
+rng_seed = 20261013
+
+[llm]
+# 任意 OpenAI 兼容端点（云端 OpenAI / DeepSeek / 本地 Ollama 的 /v1 均可）。
+# 留空 api_key 时自动降级为「本地模拟大脑」，Demo 无需联网也能完整跑通人味链路。
+# 也可以直接在网页右上角「设置」里改：热生效、免重启，并存到 data/settings.json
+#（其优先级高于本文件；想恢复本文件的值，用网页里的「清空 Key」或删掉该 json）。
+base_url = ""
+api_key = ""
+chat_model = "gpt-4o-mini"     # 强模型：对话生成
+mind_model = "gpt-4o-mini"     # 小模型：心理核算（Demo 可同款，后期拆开）
+temperature = 0.9
+max_tokens = 512
+timeout_s = 60
+
+[identity]
+# Demo 默认挂载的生命体（M12 创世后可新建更多）
+life_id = "life_demo"
+user_id = "user_demo"
+
+[store]
+path = "data/companion.db"
+
+# ---- M5 生命状态：作息节律（24h 制，小时:分钟）--------------------------
+[presence]
+enabled = true
+wake_at = "07:30"        # 起床
+sleep_at = "23:30"       # 入睡
+busy_periods = ["09:00-12:00", "14:00-18:00"]   # 忙碌
+rest_periods = ["13:00-14:00"]                   # 小睡
+# 作息随机扰动（分钟）：避免每天机械一致
+jitter_minutes = 25
+# AFK 随机离开概率（每小时），模拟"吃饭/洗澡/出门"
+afk_chance_per_hour = 0.35
+
+# ---- M6 唤醒 -----------------------------------------------------------
+[wake]
+base = 0.15          # 每条消息基础增量
+call_bonus = 0.25    # 呼唤词加成（名字 / 在吗 / 醒醒 / 喂）
+chain_bonus = 0.10   # 连环加成（距上一条 < chain_window_s）
+chain_window_s = 30
+decay_per_min = 0.02 # 自然衰减
+resting_factor = 0.8 # 小睡深度系数
+asleep_factor = 0.4  # 睡眠深度系数
+# 刚被叫醒又没下文时，回睡概率
+sleep_back_chance = 0.25
+
+# ---- M3 时序（秒）------------------------------------------------------
+[timing]
+perceive_min = 0.35
+perceive_max = 1.8
+think_min = 1.0
+think_max = 5.5
+typing_cps = 7.0       # 打字速度（字/秒）——真人中文手速≈4~8，太快会显得不像人
+seg_gap_min = 0.4      # 分条间隔
+seg_gap_max = 1.4
+d_avail_busy_min = 20     # BUSY 可及性延迟下界
+d_avail_busy_max = 300
+
+# ---- M7 不完美行为概率 --------------------------------------------------
+[imperfection]
+already_read_ignore = 0.05   # 已读不回
+absent_minded = 0.04         # 走神 / 答非所问
+rhetorical_question = 0.15   # 反问
+silence = 0.03               # 沉默
+interrupt_stammer = 0.30     # 被打断后断续
+
+# ---- 回复意愿闸门（她能自主决定"这一轮回不回"）-------------------------
+#  说明：不再是"每条必回"。先算确定性意愿分（情绪/疲惫/自控/关系/对方言行），
+#  >=direct_reply 直接回（不调模型）；<=direct_skip 直接不回；中间灰区才交给 mind 小模型裁决。
+[reply_intent]
+enabled = true
+direct_reply = 0.62          # 意愿分 >= 此值 → 直接正常回
+direct_skip = 0.28           # 意愿分 <= 此值 → 直接不回
+use_mind_model = true        # 灰区是否调用 mind 模型（关掉则灰区走本地启发式）
+max_delay_s = 6.0            # delay 档最多先晾多少秒再回
+skip_cooldown_s = 120        # 刚"不回"过后，短期内不再不回（避免像挂机）
+proactive_floor = 0.40       # 意愿分低于此值时不主动发起
+
+# ---- 认知习得约束（防止"概念表"无限膨胀 + 垃圾概念灌入）------------------
+[cognition]
+enabled = true
+max_rows = 60              # 单个生命体认知总量上限（到顶后只更新已有、不再新增）
+min_confidence = 0.45      # 低于此确信度的"概念"不予采纳（旧兜底垃圾 0.32 全被挡下）
+max_new_per_round = 1      # 每轮最多新增几条新概念
+learn_every_rounds = 2      # 每 N 轮才尝试学一次（降频，别每轮都学）
+
+# ---- M8 记忆 -----------------------------------------------------------
+[memory]
+short_window_rounds = 12     # 短期窗口：保留最近 N 轮原文
+summarize_every_rounds = 8   # 每 N 轮滚动压缩一次
+fact_extract_every_rounds = 6
+recall_top_k = 6             # 每轮召回条数
+recall_half_life_days = 7.0  # 重要性打分的时间衰减半衰期
+
+# ---- M9 关系 / 情绪 -----------------------------------------------------
+[relation]
+intimacy_up_per_round = 0.006
+trust_up_per_round = 0.004
+dependence_up_per_round = 0.005
+neglect_hours_decay = 24.0   # 超过这个时长没互动开始掉关系
+mood_drift_sigma = 0.06      # 心情底色日漂移幅度
+emotion_inertia = 0.35       # 情绪惯性（0=易变，1=顽固）
+
+# ---- M11 主动性 --------------------------------------------------------
+[proactive]
+enabled = true
+min_gap_minutes = 5          # 距上次互动最短间隔
+threshold = 0.55             # proactive_score 阈值
+check_interval_s = 45        # 调度器巡检间隔（故事时间）
+
+# ---- M12 创世 ----------------------------------------------------------
+[genesis]
+
+# ---- M13 信念漂移 ------------------------------------------------------
+[belief]
+k_repeat = 0.06              # 重复暴露因子
+identity_resist = 0.65      # 核心身份信念的抵抗
+reactance_threshold = 0.55  # 触发逆反的说服压力阈值
+decay_half_life_days = 30.0
+assimilation_rate = 0.05     # 同化（语言/情绪/偏好趋同）速率
+
+# ---- M14 情绪上头 ------------------------------------------------------
+[override]
+threshold = 0.62             # emotion_intensity × (1-self_control) 越过即上头
+min_interval_minutes = 20    # 两次上头最短间隔
+regret_delay_minutes = 25    # 事后闭环延迟
