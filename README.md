@@ -1,75 +1,91 @@
-# 念念 nianian
+# nianian · 念念
 
-> 念念不忘，必有回响。
->
-> 一个**活着的** AI 陪伴系统：不是随叫随到的问答机，而是有生物钟、有脾气、会成长、能被改变的数字生命体。
+**English** · [简体中文](README.zh-CN.md)
 
-深夜台灯下的她——白天要上班，晚上要睡觉，消息连发几条才吵得醒；你掏心窝子说一大段她会认真回，你只发"在吗"她可能懒得理；三观会随长期相处被改变，情绪上头会做反常的事、事后又后悔。
+[![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial%201.0.0-4c1)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-3776ab?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![API key](https://img.shields.io/badge/API%20key-not%20required-brightgreen)](#quick-start)
 
-## 核心特性
+> *念念不忘，必有回响。*
+> **Hold someone in your heart, and they will answer.**
 
-- **生物钟与作息**：每个生命体有按人设生成的个人作息（深夜电台主播→21:00–01:00 忙、03:30 睡），睡觉要攒"唤醒值"才吵得醒，醒得看心情回你
-- **拟人时序**：感知延迟 → 思考延迟 → 逐句打字 + 分条连发，"生成可以快，展示必须慢"
-- **心理内核**：情绪惯性 / 记好记仇 / 信念漂移（会被"洗脑"，强推会逆反）/ 情绪上头越界 + 事后后悔闭环
-- **创世（Genesis）**：掷骰生成独一无二的人格（气质 9 维 → 大五 → 依恋 → 需求恐惧 → 三观），同 seed 可复现；AI 按人设排作息
-- **认知成长**：纯洁体从"一张白纸"起步，靠对话长出认知与三观；也可直接教她（"记住……"）
-- **多生命体平台**：创建/切换/克隆/导出，每个生命体对每个用户独立积累关系与记忆
-- **多端接入**：Web 三页（夜话/心象/孕育）+ QQ（OneBot v11 协议适配）
+An AI companion that is **actually alive** — not an always-on Q&A machine, but a digital being with a circadian rhythm, a temper, and a capacity to grow.
 
-## 快速开始
+She works day shifts and sleeps at night; it takes a few messages in a row to wake her. Send her a long, heartfelt confession and she will answer seriously; send a bare "u there?" and she may not bother. Her worldview shifts through months of intimacy — and when emotion runs high she does things out of character, then regrets them afterwards.
+
+## Why it feels different
+
+Most "AI companion" projects wire a persona prompt to a chat API and call it a day. nianian puts a **deterministic brain** underneath, and calls the LLM only at the very last step — the moment she opens her mouth.
+
+- **Rule-driven subconscious** — schedule, wake-up, timing, emotion and habit acquisition are plain code. Fast, cheap, debuggable, reproducible.
+- **LLM only for speech** — one model call per utterance keeps latency and cost low, and avoids the persona drift that comes from multiple models debating each other.
+- **State machines everywhere** — every async task is interruptible and cancellable; no race conditions, no silently lost turns.
+
+The trade-off is deliberate: interactions feel human because the *human* parts (timing, fatigue, grudges, being busy) are simulated, not because a bigger model was asked to pretend.
+
+## Features
+
+- **Circadian rhythm** — each life generates a personal schedule from its own persona (a late-night radio host is busy 21:00–01:00 and sleeps at 03:30). Waking her costs "wake points", and whether she replies depends on her mood.
+- **Human-like timing** — perception delay → thinking delay → typing sentence by sentence, sent in multiple bubbles. *Generation can be fast; display must be slow.*
+- **Psychological core** — emotional inertia, keeping score of kindness and grudges, belief drift (she can be "brainwashed" — push too hard and she rebels), out-of-character overreach when worked up, plus an after-the-fact regret loop.
+- **Genesis** — roll a unique persona from a seed: 9-dimension temperament → Big Five → attachment style → needs & fears → worldview. Same seed, same soul. The AI then arranges a schedule that fits the persona.
+- **Cognition growth** — a blank life starts as a sheet of paper and grows its cognition and worldview out of conversation; you can also teach her directly ("remember that …").
+- **Multi-life platform** — create / switch / clone / export. Each life keeps its own relationship and memory per user.
+- **Multi-surface** — three web pages (Night Talk / Mindscape / Nursery) plus QQ (OneBot v11 adapter).
+
+## Quick start
 
 ```powershell
-# Python 3.12+；在项目根执行
+# Python 3.12+; run from the project root
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe -m companion.main
 ```
 
-浏览器打开 <http://127.0.0.1:8788>。
+Open <http://127.0.0.1:8788>.
 
-**无需 API Key 即可运行**：未配置 LLM 时自动降级为本地模拟大脑，全链路（时序/状态机/记忆/情绪）离线可跑。接入真实模型：页面右上「设置」填任意 OpenAI 兼容端点（DeepSeek / Ollama / vLLM…），热生效。
+**No API key required.** Without an LLM configured, it degrades to a local simulated brain — the whole pipeline (timing / state machine / memory / emotion) runs offline. To plug in a real model, open *Settings* in the top-right corner and enter any OpenAI-compatible endpoint (DeepSeek / Ollama / vLLM …). It takes effect live, no restart.
 
-## 页面
+## Pages
 
-| 页面 | 名字 | 用途 |
+| Route | Name | Purpose |
 |---|---|---|
-| `/` | 夜话 | 和她说说话 |
-| `/debug.html` | 心象 | 她此刻的内心（情绪/信念/关系实时快照，状态强切、时间倍速 1x/60x/720x） |
-| `/console.html` | 孕育 | 创建与管理生命体（人格档案/认知教导/QQ 接入配置） |
+| `/` | Night Talk | Talk to her |
+| `/debug.html` | Mindscape | Her inner state right now (live snapshot of emotion / belief / relationship, force state switches, time scaling 1x / 60x / 720x) |
+| `/console.html` | Nursery | Create and manage lives (persona archive, cognition teaching, QQ integration) |
 
-## QQ 接入
+## QQ integration
 
-在「孕育 → QQ 接入」可视化配置：连接状态、绑定哪个生命体"住进"QQ 号、私聊白名单，保存即热生效。
+Configure it visually under *Nursery → QQ integration*: connection status, which life "moves into" the QQ account, and a private-message allowlist. Saving applies live, no restart.
 
-> **合规边界**：本项目只实现 [OneBot v11](https://github.com/botuniverse/onebot-11) 开放协议的客户端适配，**不包含、不打包、不下载、不分发** NapCat 等任何第三方 QQ 协议端——请自行部署并自担其使用合规风险。
+> **Compliance boundary** — this project implements only a client adapter for the open [OneBot v11](https://github.com/botuniverse/onebot-11) protocol. It does **not include, bundle, download, or redistribute** NapCat or any other third-party QQ protocol implementation. Deploy your own, and bear your own compliance risk.
 
-## 架构
+## Architecture
 
 ```
-adapters/   接入层：web.py（FastAPI+WS）· qq.py（OneBot v11）
-engine/     引擎层：时钟/事件总线/生命状态机/唤醒/收件箱/会话状态机/时序/表达/主动性
-cognition/  认知层：LLM 网关/人格装配/记忆/召回/回复/风格/教导/习得
-mind/       心理内核：情绪与关系数值计算/信念漂移/上头判定/创世生成
-store/      存储层：SQLite(FTS5) / 人格 JSON 存档 / 运行时状态
+adapters/   Transport: web.py (FastAPI + WS) · qq.py (OneBot v11)
+engine/     Engine: clock / event bus / life state machine / wake / inbox /
+            session state machine / timing / expression / proactivity
+cognition/  Cognition: LLM gateway / persona assembly / memory / recall /
+            generation / style / teaching / acquisition
+mind/       Psyche: emotion & relationship math / belief drift /
+            overreach judging / genesis generation
+store/      Storage: SQLite (FTS5) / persona JSON archives / runtime state
 ```
 
-依赖单向向下、事件总线解耦、接入层零业务逻辑。详见[开发文档](开发文档.md)与[设计文档](AI陪伴Demo设计文档.md)。
+Dependencies flow in one direction, layers communicate through an event bus, and the transport layer contains zero business logic. See the [development notes](开发文档.md) and [design blueprint](AI陪伴Demo设计文档.md) (both in Chinese).
 
-## 配置
+## Configuration
 
-- `config.toml`：默认值（作息/时序/唤醒/信念/主动性…全部可调，带注释）
-- `data/settings.json`：网页端改动的运行时覆盖（**含 API Key，已被 .gitignore 排除**）
-- `personas/`：生命体人格存档（运行时数据，不入库）
+- `config.toml` — defaults (schedule / timing / wake / belief / proactivity … all tunable, with comments)
+- `data/settings.json` — runtime overrides made from the web UI (**contains your API key; excluded by .gitignore**)
+- `personas/` — persona archives (runtime data, not committed)
 
-## 免责声明
+## Disclaimer
 
-AI 生成内容不代表开发者立场；长期情感陪伴不能替代真实人际关系与专业心理帮助。请理性使用。
+AI-generated content does not represent the developer's views. Long-term emotional companionship is no substitute for real relationships or professional mental-health support. Please use it responsibly.
 
 ## License
 
-本项目采用 **[PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0)**：
-
-- ✅ 允许非商业用途：个人学习、研究、自用、业余爱好，以及公益 / 教育 / 科研机构的使用；可修改、可分发（须随附许可条款）
-- ❌ 禁止任何商业用途（含付费产品 / 服务、以本项目营利等）
-
-完整条款见 [LICENSE](LICENSE)。
+[PolyForm Noncommercial License 1.0.0](LICENSE) — free for personal, research, educational and other noncommercial use; **commercial use is not permitted**. See [LICENSE](LICENSE) for the full terms.
