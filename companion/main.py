@@ -77,6 +77,21 @@ def _resolve_llm_config(config: AppConfig, settings: SettingsStore) -> LLMConfig
         return base
 
 
+def _resolve_qq_config(config: AppConfig, settings: SettingsStore):
+    """在 config.toml 默认值之上叠加网页端保存的 QQ 配置（settings.json > toml）。"""
+    base = config.qq.model_dump()
+    try:
+        saved = (settings.load().get("qq") or {})
+        for key in ("enabled", "ws_url", "life_id", "allow_users"):
+            if saved.get(key) is not None:
+                base[key] = saved[key]
+        from .engine.config import QQConfig
+        return QQConfig(**base)
+    except Exception:
+        logger.warning("settings.json 里的 qq 段非法，按 config.toml 处理")
+        return config.qq
+
+
 async def run(config: AppConfig) -> None:
     seed = config.engine.rng_seed
     rng = random.Random(seed)
@@ -129,19 +144,19 @@ async def run(config: AppConfig) -> None:
     await scheduler.start()
 
     # ---- adapters 层 ---------------------------------------------------
-    app = create_app(
-        bus, registry=registry, sessions=sessions, config=config, llm=llm,
-        settings=settings, db=db,
-    )
-    qq_adapter = None
-    if config.qq.enabled:
-        from .adapters.qq import QQAdapter
+    from .adapters.qq import QQManager
 
+    qq_manager = QQManager(bus)
+    qq_cfg = _resolve_qq_config(config, settings)
+    if qq_cfg.enabled:
         try:
-            qq_adapter = QQAdapter(bus, config.qq)
-            await qq_adapter.start()
+            await qq_manager.apply(qq_cfg)
         except Exception:
             logger.exception("QQ 接入启动失败（检查 qq.life_id 与 OneBot 端点），已跳过")
+    app = create_app(
+        bus, registry=registry, sessions=sessions, config=config, llm=llm,
+        settings=settings, db=db, qq=qq_manager,
+    )
 
     logger.info(
         f"启动完成 → http://{config.server.host}:{config.server.port} "
@@ -154,8 +169,7 @@ async def run(config: AppConfig) -> None:
     try:
         await server.serve()
     finally:
-        if qq_adapter is not None:
-            await qq_adapter.stop()
+        await qq_manager.stop()
         await scheduler.stop()
         await sessions.shutdown()
         await registry.stop_all()

@@ -32,7 +32,7 @@ from loguru import logger
 
 from ..cognition.llm import EDITABLE_FIELDS, LLMConfig, LLMGateway
 from ..engine.bus import TOPIC_CONTROL, TOPIC_INCOMING, TOPIC_OUTBOUND, EventBus
-from ..engine.config import AppConfig
+from ..engine.config import AppConfig, QQConfig
 from ..engine.registry import LifeRegistry
 from ..engine.session import HIST_KIND, HIST_SCOPE, SessionManager
 from ..engine.types import IncomingMessage, OutgoingEvent, TurnState, now_dt
@@ -163,6 +163,7 @@ def create_app(
     llm: LLMGateway,
     settings: SettingsStore,
     db: Database | None = None,
+    qq: Any = None,
 ) -> FastAPI:
     app = FastAPI(title="AI 陪伴 Demo", version="0.2.0")
     manager = ConnectionManager()
@@ -267,9 +268,53 @@ def create_app(
             return {"ok": False, "error": f"配置非法：{e}"}
 
         llm.apply_config(new_cfg)
-        settings.save({"llm": {k: getattr(new_cfg, k) for k in EDITABLE_FIELDS}})
+        # merge 保存：settings.json 里还有别的段（如 qq），不能整文件覆盖
+        saved = settings.load()
+        saved["llm"] = {k: getattr(new_cfg, k) for k in EDITABLE_FIELDS}
+        settings.save(saved)
         ok, tip = await llm.probe()
         return {"ok": True, "check": {"ok": ok, "message": tip}, **llm.describe()}
+
+    # ---- QQ 接入配置（状态 + 热更新，模式同 /api/llm）--------------------
+    @app.get("/api/qq")
+    async def get_qq() -> dict:
+        """QQ 接入状态：连接状态 / 登录的 QQ 号 / 绑定的生命体 / 最近错误。"""
+        if qq is None:
+            return {"ok": False, "error": "QQ 模块未装配"}
+        return {"ok": True, **qq.snapshot()}
+
+    @app.post("/api/qq")
+    async def set_qq(request: Request) -> dict:
+        """更新 QQ 接入配置：立即热生效（停旧连接建新连接）+ 落盘 settings.json。"""
+        if qq is None:
+            return {"ok": False, "error": "QQ 模块未装配"}
+        try:
+            data: dict[str, Any] = await request.json()
+        except Exception:
+            data = {}
+        cur = qq.snapshot()
+        allow: list[int] = []
+        for u in (data.get("allow_users") if data.get("allow_users") is not None else cur.get("allow_users")) or []:
+            s = str(u).strip()
+            if s.isdigit():
+                allow.append(int(s))
+        life = str(data.get("life_id") or cur.get("life_id") or "")
+        if data.get("enabled") and life not in registry.list_ids():
+            return {"ok": False, "error": f"生命体不存在：{life}"}
+        cfg = QQConfig(
+            enabled=bool(data.get("enabled", cur.get("enabled"))),
+            ws_url=str(data.get("ws_url") or cur.get("ws_url") or "ws://127.0.0.1:3001"),
+            access_token=str(data.get("access_token") or ""),
+            life_id=life,
+            allow_users=allow,
+        )
+        snap = await qq.apply(cfg)
+        saved = settings.load()
+        saved["qq"] = {"enabled": cfg.enabled, "ws_url": cfg.ws_url,
+                       "life_id": cfg.life_id, "allow_users": cfg.allow_users}
+        settings.save(saved)
+        logger.info(f"QQ 接入配置已更新：enabled={cfg.enabled} life={cfg.life_id} {cfg.ws_url}")
+        return {"ok": True, **snap}
 
     # ==================================================================
     # 生命体控制台（14）：管理面 API（创建/预览/编辑/删除/克隆/导出/成长）

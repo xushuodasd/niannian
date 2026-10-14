@@ -63,6 +63,10 @@
   .alert.err { background: #fbeeec; color: var(--bad); }
   .alert.ok { background: #eef4ef; color: var(--ok); }
 
+  /* QQ 接入弹层 */
+  .qqstat { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 12px; font-size: 13.5px; }
+  .qqwho { margin-left: auto; color: var(--text-2); font-size: 12.5px; }
+
   @media (max-width: 760px) {
     .pane, .detail-head, .tabs { padding-left: 14px; padding-right: 14px; }
   }
@@ -78,6 +82,7 @@
     <button class="drawer-btn" id="drawerBtn" title="生命体">☰</button>
     <div class="ptitle">孕育生命体<span class="psub">从空白到成人</span></div>
     <span class="grow"></span>
+    <button class="ghost" id="btnQQ">QQ 接入</button>
     <button class="primary" id="btnNew">＋ 孕育新生命</button>
   </header>
   <div class="pagebody" id="main">
@@ -174,6 +179,30 @@
       <button class="ghost" id="btnCancel">取消</button>
       <button id="btnPreview">生成预览</button>
       <button class="primary" id="btnConfirm" style="display:none">确认新生</button>
+    </div>
+  </div>
+</div>
+
+<!-- QQ 接入配置弹层：状态 + 生命体绑定，保存即热生效 -->
+<div class="overlay" id="qqOverlay">
+  <div class="modal" style="max-width:560px">
+    <h2>QQ 接入</h2>
+    <div class="hint">让一个生命体"住进"一个 QQ 号。需要你自行部署 OneBot v11 实现端（如 NapCatQQ，自行下载并自担使用合规责任）并开启「正向 WebSocket」（默认端口 3001）——本项目只做协议适配，不包含该软件。</div>
+    <div class="qqstat" id="qqStat"></div>
+    <div class="alert err" id="qqErr"></div>
+    <div class="two">
+      <div class="field"><label>启用</label>
+        <select id="qqEnabled"><option value="false">关闭</option><option value="true">开启</option></select>
+      </div>
+      <div class="field"><label>这个 QQ 号扮演谁（绑定生命体）</label>
+        <select id="qqLife"></select>
+      </div>
+    </div>
+    <div class="field"><label>OneBot 正向 WS 地址</label><input id="qqUrl" placeholder="ws://127.0.0.1:3001" /></div>
+    <div class="field"><label>私聊白名单（QQ 号，逗号分隔；留空 = 不限）</label><input id="qqAllow" placeholder="10001, 10002" /></div>
+    <div class="foot">
+      <button class="ghost" id="qqClose">关闭</button>
+      <button class="primary" id="qqSave">保存并生效</button>
     </div>
   </div>
 </div>
@@ -621,6 +650,67 @@
   }
 
   // ---- 绑定 ----
+  // ================= QQ 接入 =================
+  const QQ_STAT = {
+    disabled: ["未启用", "var(--text-3)"], connecting: ["连接中…", "var(--warn)"],
+    connected: ["已连接", "var(--ok)"], reconnecting: ["连接失败 · 重连中", "var(--bad)"],
+  };
+  let qqTimer = null;
+
+  function paintQQ(d) {
+    const s = QQ_STAT[d.status] || QQ_STAT.disabled;
+    $("qqStat").innerHTML =
+      `<span class="tag" style="color:${s[1]};border-color:${s[1]}">${s[0]}</span>` +
+      (d.bot_uin ? `<span class="qqwho">登录号 ${esc(String(d.bot_uin))}${d.bot_name ? "（" + esc(d.bot_name) + "）" : ""}</span>` : "");
+    const err = $("qqErr");
+    if (d.last_error) { err.textContent = "最近错误：" + d.last_error; err.classList.add("on"); }
+    else err.classList.remove("on");
+    $("qqEnabled").value = d.enabled ? "true" : "false";
+    if (d.ws_url) $("qqUrl").value = d.ws_url;
+    $("qqAllow").value = (d.allow_users || []).join(", ");
+    const sel = $("qqLife");
+    sel.innerHTML = "";
+    lives.forEach((l) => {
+      const o = document.createElement("option");
+      o.value = l.life_id;
+      o.textContent = `${l.name}（${ORIGIN_CN[l.origin] || l.origin}）`;
+      if (l.life_id === d.life_id) o.selected = true;
+      sel.appendChild(o);
+    });
+    if (d.life_id) sel.value = d.life_id;
+  }
+
+  async function refreshQQ() {
+    try { const d = await api("/api/qq"); if (d.ok) paintQQ(d); } catch { /* 状态轮询失败忽略 */ }
+  }
+
+  async function openQQ() {
+    $("qqOverlay").classList.add("on");
+    if (!lives.length) await loadLives();
+    await refreshQQ();
+    if (qqTimer) clearInterval(qqTimer);
+    qqTimer = setInterval(refreshQQ, 4000);
+  }
+  function closeQQ() {
+    $("qqOverlay").classList.remove("on");
+    if (qqTimer) { clearInterval(qqTimer); qqTimer = null; }
+  }
+  async function saveQQ() {
+    const body = {
+      enabled: $("qqEnabled").value === "true",
+      ws_url: $("qqUrl").value.trim() || "ws://127.0.0.1:3001",
+      life_id: $("qqLife").value,
+      allow_users: $("qqAllow").value.split(/[,，\s]+/).filter((x) => x.trim()),
+    };
+    const d = await post("/api/qq", body);
+    if (d.ok) paintQQ(d);
+    else { const err = $("qqErr"); err.textContent = d.error || "保存失败"; err.classList.add("on"); }
+  }
+  $("btnQQ").onclick = openQQ;
+  $("qqClose").onclick = closeQQ;
+  $("qqSave").onclick = saveQQ;
+  $("qqOverlay").onclick = (e) => { if (e.target === $("qqOverlay")) closeQQ(); };
+
   $("btnNew").onclick = openCreate;
   $("btnCancel").onclick = closeCreate;
   $("createOverlay").onclick = (e) => { if (e.target === $("createOverlay")) closeCreate(); };
